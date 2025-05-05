@@ -1,0 +1,19 @@
+kproximate:
+  config:
+    kpNodeCores: 2
+    kpNodeMemory: 2048
+    kpNodeNamePrefix: kp-node
+    kpNodeTemplateName: kproximate-template
+    kpNodeLabels: "topology.kubernetes.io/region=proxmox-cluster,topology.kubernetes.io/zone={{ .TargetHost }}"
+    loadHeadroom: 0.2
+    maxKpNodes: 4
+    pmUrl: https://<proxmox-host>:8006/api2/json
+    pmUserID: kproximate@pam!kproximate
+
+  secrets:
+    pmToken: <proxmox-api-token>
+    sshKey: <ssh-public-key>
+
+rabbitmq:
+  auth:
+    password: <set-rabbitmq-password-here>

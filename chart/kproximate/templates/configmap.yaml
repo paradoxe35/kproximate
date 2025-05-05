@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kproximate.fullname" . }}
+data:
+  debug: {{ .Values.kproximate.config.debug | quote }}
+  kpNodeCores: {{ .Values.kproximate.config.kpNodeCores | quote }}
+  kpNodeDisableSsh: {{ .Values.kproximate.config.kpNodeDisableSsh | quote }}
+  kpNodeLabels: {{ .Values.kproximate.config.kpNodeLabels | quote }}
+  kpNodeMemory: {{ .Values.kproximate.config.kpNodeMemory | quote }}
+  kpNodeNamePrefix: {{ .Values.kproximate.config.kpNodeNamePrefix | quote }}
+  kpNodeTemplateName: {{ .Values.kproximate.config.kpNodeTemplateName | quote | required ".Values.kproximate.config.kpNodeTemplateName is required" }}
+  kpQemuExecJoin: {{ .Values.kproximate.config.kpQemuExecJoin | quote }}
+  kpLocalTemplateStorage: {{ .Values.kproximate.config.kpLocalTemplateStorage | quote }}
+  loadHeadroom: {{ .Values.kproximate.config.loadHeadroom | quote }}
+  maxKpNodes: {{ .Values.kproximate.config.maxKpNodes | quote }}
+  pmAllowInsecure: {{ .Values.kproximate.config.pmAllowInsecure | quote }}
+  pmDebug: {{ .Values.kproximate.config.pmDebug | quote }}
+  pmUrl: {{ .Values.kproximate.config.pmUrl | quote | required ".Values.kproximate.config.pmUrl is required" }}
+  pmUserID: {{ .Values.kproximate.config.pmUserID | quote | required ".Values.kproximate.config.pmUserID is required" }}
+  pollInterval: {{ .Values.kproximate.config.pollInterval | quote }}
+  rabbitMQHost: {{ .Values.kproximate.config.rabbitMQHost | quote }}
+  rabbitMQPort: {{ .Values.kproximate.config.rabbitMQPort | quote }}
+  rabbitMQUser: {{ .Values.rabbitmq.auth.username | quote }}
+  waitSecondsForJoin: {{ .Values.kproximate.config.waitSecondsForJoin | quote }}
+  waitSecondsForProvision: {{ .Values.kproximate.config.waitSecondsForProvision | quote }}
