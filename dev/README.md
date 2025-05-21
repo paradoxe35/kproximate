@@ -7,6 +7,49 @@ This guide explains how to run Kproximate locally in development mode without de
 - [Docker](https://docs.docker.com/get-docker/)
 - [Go](https://golang.org/doc/install) (version 1.22 or later)
 - A Proxmox environment (for full functionality)
+- A Kubernetes cluster (for full functionality)
+
+## Using the Makefile
+
+The project includes a Makefile with commands for common development tasks:
+
+```bash
+# Show all available commands
+make help
+
+# Set up the development environment
+make dev-setup
+
+# Set up Kubernetes permissions
+make dev-k8s-setup
+
+# Run Kproximate in development mode
+make dev-run
+
+# Clean up Kubernetes permissions
+make dev-k8s-cleanup
+
+# Start RabbitMQ container
+make dev-rabbitmq-start
+
+# Stop RabbitMQ container
+make dev-rabbitmq-stop
+
+# Build controller and worker binaries
+make dev-build
+
+# Run tests
+make dev-test
+
+# Set up everything and run in development mode
+make dev-all
+
+# Stop everything and clean up
+make dev-stop-all
+
+# Reset development environment completely
+make dev-reset
+```
 
 ## Running Locally
 
@@ -24,6 +67,12 @@ The `dev.sh` script sets up a local development environment for Kproximate. It:
 ```
 
 This will start Kproximate with default configuration values.
+
+Alternatively, you can use the Makefile:
+
+```bash
+make dev-run
+```
 
 ### Environment Configuration
 
@@ -80,6 +129,11 @@ Kproximate requires specific Kubernetes permissions to function properly. To set
    ./dev/setup-k8s-permissions.sh
    ```
 
+   Or use the Makefile:
+   ```bash
+   make dev-k8s-setup
+   ```
+
    This script will:
    - Create a ServiceAccount in your Kubernetes cluster
    - Create a ClusterRole with the necessary permissions
@@ -91,12 +145,33 @@ Kproximate requires specific Kubernetes permissions to function properly. To set
    KUBECONFIG=/path/to/kubeconfig
    ```
 
+### Cleaning Up Kubernetes Permissions
+
+To remove the Kubernetes permissions when you're done:
+
+1. Run the cleanup script:
+   ```bash
+   ./dev/cleanup-k8s-permissions.sh
+   ```
+
+   Or use the Makefile:
+   ```bash
+   make dev-k8s-cleanup
+   ```
+
 ### Customizing Kubernetes Setup
 
-You can customize the Kubernetes setup by providing options to the setup script:
+You can customize the Kubernetes setup by providing options to the setup and cleanup scripts:
 
 ```bash
 ./dev/setup-k8s-permissions.sh --namespace my-namespace --name my-kproximate
+./dev/cleanup-k8s-permissions.sh --namespace my-namespace --name my-kproximate
+```
+
+Or with the Makefile:
+```bash
+make dev-k8s-setup NAMESPACE=my-namespace NAME=my-kproximate
+make dev-k8s-cleanup NAMESPACE=my-namespace NAME=my-kproximate
 ```
 
 Available options:
