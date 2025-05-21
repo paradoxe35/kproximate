@@ -207,6 +207,27 @@ export rabbitMQUseTLS=${RABBITMQ_USE_TLS:-false}
 if [ ! -z "$KUBECONFIG" ]; then
     print_info "Using KUBECONFIG: $KUBECONFIG"
     export KUBECONFIG=$KUBECONFIG
+
+    # Check if the kubeconfig file exists
+    if [ ! -f "$KUBECONFIG" ]; then
+        print_error "KUBECONFIG file not found: $KUBECONFIG"
+        print_error "Please run 'make dev-k8s-setup' or './dev/setup-k8s-permissions.sh' first"
+        exit 1
+    else
+        # Check if the ServiceAccount exists in the cluster
+        if kubectl --kubeconfig="$KUBECONFIG" get serviceaccount kproximate-dev -n kproximate-dev &> /dev/null; then
+            print_info "Kubernetes permissions are set up correctly"
+        else
+            print_error "Kubernetes ServiceAccount 'kproximate-dev' not found in namespace 'kproximate-dev'"
+            print_error "Please run 'make dev-k8s-setup' or './dev/setup-k8s-permissions.sh' first"
+            exit 1
+        fi
+    fi
+else
+    print_error "KUBECONFIG is not set. Kubernetes permissions are required."
+    print_error "Run 'make dev-k8s-setup' or './dev/setup-k8s-permissions.sh' to set up Kubernetes permissions"
+    print_error "Then add the generated kubeconfig path to your .env.dev file"
+    exit 1
 fi
 
 # Proxmox configuration
