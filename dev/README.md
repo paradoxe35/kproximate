@@ -5,7 +5,7 @@ This guide explains how to run Kproximate locally in development mode without de
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/)
-- [Go](https://golang.org/doc/install) (version 1.22 or later)
+- [Go](https://golang.org/doc/install) (version 1.24 or later)
 - A Proxmox environment (for full functionality)
 - A Kubernetes cluster (for full functionality)
 

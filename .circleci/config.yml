@@ -11,7 +11,7 @@ jobs:
   test:
     working_directory: ~/project/kproximate
     docker:
-      - image: cimg/go:1.22
+      - image: cimg/go:1.24
     steps:
       - checkout:
           path: ~/project
