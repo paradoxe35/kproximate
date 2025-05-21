@@ -178,7 +178,7 @@ make dev-k8s-cleanup NAMESPACE=my-namespace NAME=my-kproximate
 ```
 
 Available options:
-- `--namespace`: Kubernetes namespace to use (default: default)
+- `--namespace`: Kubernetes namespace to use (default: kproximate-dev)
 - `--name`: Name prefix for resources (default: kproximate-dev)
 
 ## Proxmox Configuration

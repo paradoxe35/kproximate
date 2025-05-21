@@ -37,7 +37,7 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Default values
-NAMESPACE="default"
+NAMESPACE="kproximate-dev"
 NAME="kproximate-dev"
 
 # Parse command line arguments

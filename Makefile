@@ -1,7 +1,7 @@
 # Makefile for Kproximate development
 
 # Default values
-NAMESPACE ?= default
+NAMESPACE ?= kproximate-dev
 NAME ?= kproximate-dev
 
 .PHONY: help
