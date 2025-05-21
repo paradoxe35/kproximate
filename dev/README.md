@@ -148,6 +148,8 @@ Kproximate requires specific Kubernetes permissions to function properly. To set
    KUBECONFIG=/path/to/kubeconfig
    ```
 
+   The development script will automatically pass the `--kubeconfig` flag to the controller and worker components.
+
 ### Cleaning Up Kubernetes Permissions
 
 To remove the Kubernetes permissions when you're done:

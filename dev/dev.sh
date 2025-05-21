@@ -275,23 +275,30 @@ cd ..
 run_component() {
     local component=$1
     local title=$2
+    local kubeconfig_flag=""
+
+    # Add kubeconfig flag if KUBECONFIG is set
+    if [ ! -z "$KUBECONFIG" ]; then
+        kubeconfig_flag="--kubeconfig=$KUBECONFIG"
+        print_info "Using kubeconfig flag for $component: $kubeconfig_flag"
+    fi
 
     # Use different terminal commands based on the OS
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
         if command -v gnome-terminal &> /dev/null; then
-            gnome-terminal --title="$title" -- bash -c "cd $(pwd) && ./bin/$component; exec bash"
+            gnome-terminal --title="$title" -- bash -c "cd $(pwd) && ./bin/$component $kubeconfig_flag; exec bash"
         elif command -v xterm &> /dev/null; then
-            xterm -title "$title" -e "cd $(pwd) && ./bin/$component; exec bash" &
+            xterm -title "$title" -e "cd $(pwd) && ./bin/$component $kubeconfig_flag; exec bash" &
         else
             print_warning "No suitable terminal emulator found. Running $component in the background."
-            ./bin/$component &
+            ./bin/$component $kubeconfig_flag &
         fi
     elif [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && ./bin/$component\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && ./bin/$component $kubeconfig_flag\""
     else
         print_warning "Unsupported OS. Running $component in the background."
-        ./bin/$component &
+        ./bin/$component $kubeconfig_flag &
     fi
 }
 
