@@ -47,17 +47,17 @@ WAIT_SECONDS_FOR_PROVISION=60
 ENV_FILE="$SCRIPT_DIR/.env.dev"
 if [ -f "$ENV_FILE" ]; then
     print_info "Loading environment variables from $ENV_FILE"
-    
+
     # Read .env.dev file and export variables
     while IFS= read -r line || [[ -n "$line" ]]; do
         # Skip comments and empty lines
         if [[ $line =~ ^#.*$ ]] || [[ -z $line ]]; then
             continue
         fi
-        
+
         # Export the variable
         export "$line"
-        
+
         # Extract variable name for logging
         var_name=$(echo "$line" | cut -d= -f1)
         print_info "Loaded $var_name"
@@ -170,7 +170,7 @@ if ! docker ps -a --format '{{.Names}}' | grep -q "^${RABBITMQ_CONTAINER_NAME}$"
         -e RABBITMQ_DEFAULT_USER=$RABBITMQ_USER \
         -e RABBITMQ_DEFAULT_PASS=$RABBITMQ_PASSWORD \
         rabbitmq:3-management
-    
+
     # Wait for RabbitMQ to start
     print_info "Waiting for RabbitMQ to start..."
     sleep 10
@@ -179,7 +179,7 @@ else
     if ! docker ps --format '{{.Names}}' | grep -q "^${RABBITMQ_CONTAINER_NAME}$"; then
         print_info "Starting existing RabbitMQ container..."
         docker start $RABBITMQ_CONTAINER_NAME
-        
+
         # Wait for RabbitMQ to start
         print_info "Waiting for RabbitMQ to start..."
         sleep 10
@@ -201,6 +201,12 @@ export rabbitMQHost="localhost"
 export rabbitMQPort=$RABBITMQ_PORT
 export rabbitMQUser=$RABBITMQ_USER
 export rabbitMQPassword=$RABBITMQ_PASSWORD
+
+# Kubernetes configuration
+if [ ! -z "$KUBECONFIG" ]; then
+    print_info "Using KUBECONFIG: $KUBECONFIG"
+    export KUBECONFIG=$KUBECONFIG
+fi
 
 # Proxmox configuration
 if [ ! -z "$PM_URL" ]; then
@@ -258,7 +264,7 @@ go build -o bin/worker kproximate/worker/worker.go
 run_component() {
     local component=$1
     local title=$2
-    
+
     # Use different terminal commands based on the OS
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
         if command -v gnome-terminal &> /dev/null; then

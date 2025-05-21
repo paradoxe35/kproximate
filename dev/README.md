@@ -71,7 +71,39 @@ You can also provide configuration via command-line arguments, which will overri
 | `--pm-token` | Proxmox token | - |
 | `--kp-node-template-name` | Kproximate node template name | - |
 
-### Proxmox Configuration
+### Kubernetes Permissions Setup
+
+Kproximate requires specific Kubernetes permissions to function properly. To set up these permissions for local development:
+
+1. Run the setup script:
+   ```bash
+   ./dev/setup-k8s-permissions.sh
+   ```
+
+   This script will:
+   - Create a ServiceAccount in your Kubernetes cluster
+   - Create a ClusterRole with the necessary permissions
+   - Create a ClusterRoleBinding to bind the ServiceAccount to the ClusterRole
+   - Generate a kubeconfig file for the ServiceAccount
+
+2. Add the generated kubeconfig path to your `.env.dev` file:
+   ```
+   KUBECONFIG=/path/to/kubeconfig
+   ```
+
+### Customizing Kubernetes Setup
+
+You can customize the Kubernetes setup by providing options to the setup script:
+
+```bash
+./dev/setup-k8s-permissions.sh --namespace my-namespace --name my-kproximate
+```
+
+Available options:
+- `--namespace`: Kubernetes namespace to use (default: default)
+- `--name`: Name prefix for resources (default: kproximate-dev)
+
+## Proxmox Configuration
 
 For full functionality, you need to provide Proxmox configuration either in the `.env.dev` file or via command-line arguments:
 

@@ -6,5 +6,6 @@ unschedulable.yaml
 # Development environment
 dev/.env.dev
 bin/
+dev/kubeconfig
 
 chart/kproximate/**/*.tgz
