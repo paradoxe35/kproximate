@@ -249,6 +249,15 @@ if [ ! -z "$KP_NODE_LABELS" ]; then
     export kpNodeLabels=$KP_NODE_LABELS
 fi
 
+# If KP_JOIN_COMMAND is provided, export it
+if [ ! -z "$KP_JOIN_COMMAND" ]; then
+    export kpJoinCommand=$KP_JOIN_COMMAND
+    print_info "Using kpJoinCommand from environment"
+else
+    print_warning "kpJoinCommand is not set. Nodes will not be able to join the Kubernetes cluster."
+    print_warning "Set KP_JOIN_COMMAND in your .env.dev file."
+fi
+
 # Change to project root directory
 cd $PROJECT_ROOT
 
