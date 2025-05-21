@@ -16,6 +16,10 @@ While it is a pretty niche project, some possible use cases include:
 - Something someone else thinks of that I haven't
 - Just because...
 
+## Development
+
+For local development without Helm, see the [Development Guide](dev/README.md).
+
 ## Configuration and Installation
 See [here](https://github.com/paradoxe35/kproximate/tree/main/examples) for example setup scripts and configuration.
 

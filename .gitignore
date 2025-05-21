@@ -3,4 +3,8 @@ dev-values.yaml
 test-pod.yaml
 unschedulable.yaml
 
+# Development environment
+dev/.env.dev
+bin/
+
 chart/kproximate/**/*.tgz
