@@ -41,9 +41,10 @@ dev-rabbitmq-start: ## Start RabbitMQ container for development
 	@docker run -d --name kproximate-rabbitmq \
 		-p 5672:5672 \
 		-p 15672:15672 \
-		-e RABBITMQ_DEFAULT_USER=guest \
-		-e RABBITMQ_DEFAULT_PASS=guest \
-		rabbitmq:3-management || \
+		-e RABBITMQ_USERNAME=guest \
+		-e RABBITMQ_PASSWORD=guest \
+		-e RABBITMQ_SSL_VERIFY=verify_none \
+		bitnami/rabbitmq:4.1 || \
 	(docker start kproximate-rabbitmq && echo "RabbitMQ container already exists, starting it...")
 
 .PHONY: dev-rabbitmq-stop
