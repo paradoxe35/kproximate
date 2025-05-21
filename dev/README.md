@@ -35,6 +35,9 @@ make dev-rabbitmq-start
 # Stop RabbitMQ container
 make dev-rabbitmq-stop
 
+# Install Go dependencies
+make dev-deps
+
 # Build controller and worker binaries
 make dev-build
 
@@ -229,7 +232,11 @@ docker restart kproximate-rabbitmq
 If you encounter errors during the build process, make sure all dependencies are installed:
 
 ```bash
-go get ./...
+# Using the script
+cd kproximate && go get ./...
+
+# Or using the Makefile
+make dev-deps
 ```
 
 ### Terminal Issues

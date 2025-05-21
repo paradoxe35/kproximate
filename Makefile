@@ -56,12 +56,18 @@ dev-rabbitmq-remove: dev-rabbitmq-stop ## Remove RabbitMQ container
 	@echo "Removing RabbitMQ container..."
 	@docker rm kproximate-rabbitmq || echo "RabbitMQ container not found."
 
+.PHONY: dev-deps
+dev-deps: ## Install Go dependencies
+	@echo "Installing Go dependencies..."
+	@cd kproximate && go get ./...
+	@echo "Dependencies installed."
+
 .PHONY: dev-build
-dev-build: ## Build controller and worker binaries
+dev-build: dev-deps ## Build controller and worker binaries
 	@echo "Building controller and worker..."
 	@mkdir -p bin
-	@go build -o bin/controller kproximate/controller/controller.go
-	@go build -o bin/worker kproximate/worker/worker.go
+	@cd kproximate && go build -o ../bin/controller controller/controller.go
+	@cd kproximate && go build -o ../bin/worker worker/worker.go
 	@echo "Binaries built in bin/ directory."
 
 .PHONY: dev-clean
@@ -73,7 +79,7 @@ dev-clean: ## Remove built binaries
 .PHONY: dev-test
 dev-test: ## Run tests
 	@echo "Running tests..."
-	@go test ./...
+	@cd kproximate && go test ./...
 
 .PHONY: dev-all
 dev-all: dev-setup dev-k8s-setup dev-build dev-run ## Set up everything and run in development mode

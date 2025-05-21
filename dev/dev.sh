@@ -257,8 +257,10 @@ mkdir -p bin
 
 # Build the controller and worker
 print_info "Building controller and worker..."
-go build -o bin/controller kproximate/controller/controller.go
-go build -o bin/worker kproximate/worker/worker.go
+cd kproximate
+go build -o ../bin/controller controller/controller.go
+go build -o ../bin/worker worker/worker.go
+cd ..
 
 # Function to run a component in a new terminal
 run_component() {
