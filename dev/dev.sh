@@ -201,7 +201,7 @@ export rabbitMQHost="localhost"
 export rabbitMQPort=$RABBITMQ_PORT
 export rabbitMQUser=$RABBITMQ_USER
 export rabbitMQPassword=$RABBITMQ_PASSWORD
-export rabbitMQUseTLS=false
+export rabbitMQUseTLS=${RABBITMQ_USE_TLS:-false}
 
 # Kubernetes configuration
 if [ ! -z "$KUBECONFIG" ]; then
