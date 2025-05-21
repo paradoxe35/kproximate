@@ -1,4 +1,4 @@
-module github.com/jedrw/kproximate
+module github.com/paradoxe35/kproximate
 
 go 1.22.0
 

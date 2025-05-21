@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jedrw/kproximate/logger"
+	"github.com/paradoxe35/kproximate/logger"
 	apiv1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"

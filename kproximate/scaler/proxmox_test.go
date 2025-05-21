@@ -5,9 +5,9 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/jedrw/kproximate/config"
-	"github.com/jedrw/kproximate/kubernetes"
-	"github.com/jedrw/kproximate/proxmox"
+	"github.com/paradoxe35/kproximate/config"
+	"github.com/paradoxe35/kproximate/kubernetes"
+	"github.com/paradoxe35/kproximate/proxmox"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 )

@@ -3,7 +3,7 @@ package scaler
 import (
 	"context"
 
-	"github.com/jedrw/kproximate/proxmox"
+	"github.com/paradoxe35/kproximate/proxmox"
 )
 
 type Scaler interface {

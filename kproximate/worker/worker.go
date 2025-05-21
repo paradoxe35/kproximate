@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jedrw/kproximate/config"
-	"github.com/jedrw/kproximate/logger"
-	"github.com/jedrw/kproximate/rabbitmq"
-	"github.com/jedrw/kproximate/scaler"
+	"github.com/paradoxe35/kproximate/config"
+	"github.com/paradoxe35/kproximate/logger"
+	"github.com/paradoxe35/kproximate/rabbitmq"
+	"github.com/paradoxe35/kproximate/scaler"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

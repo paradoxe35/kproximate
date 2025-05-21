@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/jedrw/kproximate/config"
-	"github.com/jedrw/kproximate/logger"
+	"github.com/paradoxe35/kproximate/config"
+	"github.com/paradoxe35/kproximate/logger"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

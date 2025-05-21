@@ -118,7 +118,7 @@ rabbitmq:
       effect: NoSchedule
 
 image:
-  registry: ghcr.io/jedrw
+  registry: ghcr.io/paradoxe35
   pullPolicy: IfNotPresent
 
 nameOverride: ""
