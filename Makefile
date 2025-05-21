@@ -20,6 +20,9 @@ dev-setup: ## Create .env.dev file from template if it doesn't exist
 		echo "dev/.env.dev already exists."; \
 	fi
 
+.PHONY: dev
+dev: dev-run
+
 .PHONY: dev-run
 dev-run: ## Run Kproximate in development mode
 	@echo "Starting Kproximate in development mode..."
@@ -44,7 +47,7 @@ dev-rabbitmq-start: ## Start RabbitMQ container for development
 		-e RABBITMQ_USERNAME=guest \
 		-e RABBITMQ_PASSWORD=guest \
 		-e RABBITMQ_SSL_VERIFY=verify_none \
-		bitnami/rabbitmq:4.1 || \
+		rabbitmq:3-management || \
 	(docker start kproximate-rabbitmq && echo "RabbitMQ container already exists, starting it...")
 
 .PHONY: dev-rabbitmq-stop

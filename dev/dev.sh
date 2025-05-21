@@ -169,7 +169,7 @@ if ! docker ps -a --format '{{.Names}}' | grep -q "^${RABBITMQ_CONTAINER_NAME}$"
         -p $RABBITMQ_MANAGEMENT_PORT:15672 \
         -e RABBITMQ_USERNAME=$RABBITMQ_USER \
         -e RABBITMQ_PASSWORD=$RABBITMQ_PASSWORD \
-        bitnami/rabbitmq:4.1
+        rabbitmq:3-management
 
     # Wait for RabbitMQ to start
     print_info "Waiting for RabbitMQ to start..."
