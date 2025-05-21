@@ -39,6 +39,7 @@ type RabbitConfig struct {
 	Password string `env:"rabbitMQPassword"`
 	Port     int    `env:"rabbitMQPort"`
 	User     string `env:"rabbitMQUser"`
+	UseTLS   bool   `env:"rabbitMQUseTLS"`
 }
 
 func GetKpConfig() (KproximateConfig, error) {
@@ -55,7 +56,9 @@ func GetKpConfig() (KproximateConfig, error) {
 }
 
 func GetRabbitConfig() (RabbitConfig, error) {
-	config := &RabbitConfig{}
+	config := &RabbitConfig{
+		UseTLS: true, // Default to true for production use
+	}
 
 	err := envconfig.Process(context.Background(), config)
 	if err != nil {

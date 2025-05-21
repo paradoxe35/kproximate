@@ -17,20 +17,38 @@ type queueInfo struct {
 }
 
 func NewRabbitmqConnection(rabbitConfig config.RabbitConfig) (*amqp.Connection, *http.Client) {
-	tls := &tls.Config{InsecureSkipVerify: true}
+	tlsConfig := &tls.Config{InsecureSkipVerify: true}
+	var conn *amqp.Connection
+	var err error
+	var mgmtClient *http.Client
 
-	rabbitMQUrl := fmt.Sprintf("amqps://%s:%s@%s:%d/", rabbitConfig.User, rabbitConfig.Password, rabbitConfig.Host, rabbitConfig.Port)
+	if rabbitConfig.UseTLS {
+		// Use TLS connection
+		rabbitMQUrl := fmt.Sprintf("amqps://%s:%s@%s:%d/", rabbitConfig.User, rabbitConfig.Password, rabbitConfig.Host, rabbitConfig.Port)
+		logger.InfoLog("Connecting to RabbitMQ with TLS", "url", rabbitMQUrl)
 
-	conn, err := amqp.DialTLS(rabbitMQUrl, tls)
+		conn, err = amqp.DialTLS(rabbitMQUrl, tlsConfig)
+
+		// Create HTTP client with TLS for management API
+		tr := &http.Transport{
+			TLSClientConfig: tlsConfig,
+		}
+		mgmtClient = &http.Client{
+			Transport: tr,
+		}
+	} else {
+		// Use non-TLS connection
+		rabbitMQUrl := fmt.Sprintf("amqp://%s:%s@%s:%d/", rabbitConfig.User, rabbitConfig.Password, rabbitConfig.Host, rabbitConfig.Port)
+		logger.InfoLog("Connecting to RabbitMQ without TLS", "url", rabbitMQUrl)
+
+		conn, err = amqp.Dial(rabbitMQUrl)
+
+		// Create standard HTTP client for management API
+		mgmtClient = &http.Client{}
+	}
+
 	if err != nil {
 		logger.ErrorLog("Failed to connect to RabbitMQ", "error", err)
-	}
-
-	tr := &http.Transport{
-		TLSClientConfig: tls,
-	}
-	mgmtClient := &http.Client{
-		Transport: tr,
 	}
 
 	return conn, mgmtClient
@@ -87,7 +105,15 @@ func GetPendingScaleEvents(ch *amqp.Channel, queueName string) (int, error) {
 }
 
 func GetRunningScaleEvents(client *http.Client, rabbitConfig config.RabbitConfig, queueName string) (int, error) {
-	endpoint := fmt.Sprintf("http://%s:15672/api/queues/%s/%s", rabbitConfig.Host, url.PathEscape("/"), queueName)
+	// Use HTTPS for the management API when TLS is enabled
+	protocol := "http"
+	if rabbitConfig.UseTLS {
+		protocol = "https"
+	}
+
+	endpoint := fmt.Sprintf("%s://%s:15672/api/queues/%s/%s", protocol, rabbitConfig.Host, url.PathEscape("/"), queueName)
+	logger.InfoLog("Connecting to RabbitMQ management API", "url", endpoint)
+
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return 0, err

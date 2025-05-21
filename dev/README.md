@@ -219,11 +219,26 @@ To remove the RabbitMQ container:
 docker rm kproximate-rabbitmq
 ```
 
+## Development Mode
+
+The development environment is configured for local development with:
+
+1. **Non-TLS RabbitMQ Connection**: The application connects to RabbitMQ without TLS by setting `rabbitMQUseTLS=false`. This is appropriate for local development since the local RabbitMQ container doesn't have TLS enabled.
+
+2. **Debug Logging**: More verbose logging is enabled to help with troubleshooting.
+
 ## Troubleshooting
 
 ### RabbitMQ Connection Issues
 
-If you encounter connection issues with RabbitMQ, try restarting the container:
+If you encounter connection issues with RabbitMQ, such as TLS handshake errors like `"tls: first record does not look like a TLS handshake"`, make sure the `rabbitMQUseTLS` setting is set to `false` in your environment:
+
+```bash
+# This is set automatically in dev.sh, but you can also add it to your .env.dev file
+RABBITMQ_USE_TLS=false
+```
+
+If you're still having issues, try restarting the RabbitMQ container:
 
 ```bash
 docker restart kproximate-rabbitmq
