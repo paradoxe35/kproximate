@@ -140,39 +140,39 @@ func (scaler *ProxmoxScaler) RequiredScaleEvents(allScaleEvents int) ([]*ScaleEv
 	return scaler.requiredScaleEvents(unschedulableResources, allScaleEvents)
 }
 
-func selectTargetHost(hosts []proxmox.HostInformation, kpNodes []proxmox.VmInformation, scaleEvents []*ScaleEvent) proxmox.HostInformation {
-skipHost:
-	for _, host := range hosts {
-		// Check for a scaleEvent targeting the pHost
-		for _, scaleEvent := range scaleEvents {
-			if scaleEvent.TargetHost.Node == host.Node {
-				continue skipHost
-			}
-		}
+// func selectTargetHost(hosts []proxmox.HostInformation, kpNodes []proxmox.VmInformation, scaleEvents []*ScaleEvent) proxmox.HostInformation {
+// skipHost:
+// 	for _, host := range hosts {
+// 		// Check for a scaleEvent targeting the pHost
+// 		for _, scaleEvent := range scaleEvents {
+// 			if scaleEvent.TargetHost.Node == host.Node {
+// 				continue skipHost
+// 			}
+// 		}
 
-		for _, kpNode := range kpNodes {
-			// Check for an existing kpNode on the pHost
-			if kpNode.Node == host.Node {
-				continue skipHost
-			}
-		}
+// 		for _, kpNode := range kpNodes {
+// 			// Check for an existing kpNode on the pHost
+// 			if kpNode.Node == host.Node {
+// 				continue skipHost
+// 			}
+// 		}
 
-		return host
-	}
+// 		return host
+// 	}
 
-	return selectMaxAvailableMemHost(hosts)
-}
+// 	return selectMaxAvailableMemHost(hosts)
+// }
 
-func selectMaxAvailableMemHost(hosts []proxmox.HostInformation) proxmox.HostInformation {
-	selectedHostHost := hosts[0]
-	for _, host := range hosts {
-		if (host.Maxmem - host.Mem) > (selectedHostHost.Maxmem - selectedHostHost.Mem) {
-			selectedHostHost = host
-		}
-	}
+// func selectMaxAvailableMemHost(hosts []proxmox.HostInformation) proxmox.HostInformation {
+// 	selectedHostHost := hosts[0]
+// 	for _, host := range hosts {
+// 		if (host.Maxmem - host.Mem) > (selectedHostHost.Maxmem - selectedHostHost.Mem) {
+// 			selectedHostHost = host
+// 		}
+// 	}
 
-	return selectedHostHost
-}
+// 	return selectedHostHost
+// }
 
 func (scaler *ProxmoxScaler) SelectTargetHosts(scaleEvents []*ScaleEvent) error {
 	hosts, err := scaler.Proxmox.GetClusterStats()
