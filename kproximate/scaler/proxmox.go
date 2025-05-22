@@ -19,9 +19,10 @@ import (
 )
 
 type ProxmoxScaler struct {
-	config     config.KproximateConfig
-	Kubernetes kubernetes.Kubernetes
-	Proxmox    proxmox.Proxmox
+	config       config.KproximateConfig
+	Kubernetes   kubernetes.Kubernetes
+	Proxmox      proxmox.Proxmox
+	nodeSelector *NodeSelector
 }
 
 func NewProxmoxScaler(config config.KproximateConfig) (Scaler, error) {
@@ -51,9 +52,10 @@ func NewProxmoxScaler(config config.KproximateConfig) (Scaler, error) {
 	}
 
 	scaler := ProxmoxScaler{
-		config:     config,
-		Kubernetes: &kubernetes,
-		Proxmox:    &proxmox,
+		config:       config,
+		Kubernetes:   &kubernetes,
+		Proxmox:      &proxmox,
+		nodeSelector: NewNodeSelector(config),
 	}
 
 	return &scaler, err
@@ -183,9 +185,13 @@ func (scaler *ProxmoxScaler) SelectTargetHosts(scaleEvents []*ScaleEvent) error 
 		return err
 	}
 
+	// Log the strategy being used
+	logger.InfoLog(fmt.Sprintf("Using node selection strategy: %s", scaler.nodeSelector.GetStrategyDescription()))
+
 	for _, scaleEvent := range scaleEvents {
-		scaleEvent.TargetHost = selectTargetHost(hosts, kpNodes, scaleEvents)
-		logger.DebugLog(fmt.Sprintf("Selected target host %s for %s", scaleEvent.TargetHost.Node, scaleEvent.NodeName))
+		scaleEvent.TargetHost = scaler.nodeSelector.SelectTargetHost(hosts, kpNodes, scaleEvents)
+		logger.DebugLog(fmt.Sprintf("Selected target host %s for %s using %s strategy",
+			scaleEvent.TargetHost.Node, scaleEvent.NodeName, scaler.config.NodeSelectionStrategy))
 	}
 
 	return nil

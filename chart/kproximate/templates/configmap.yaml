@@ -19,6 +19,10 @@ data:
   pmUrl: {{ .Values.kproximate.config.pmUrl | quote | required ".Values.kproximate.config.pmUrl is required" }}
   pmUserID: {{ .Values.kproximate.config.pmUserID | quote | required ".Values.kproximate.config.pmUserID is required" }}
   pollInterval: {{ .Values.kproximate.config.pollInterval | quote }}
+  nodeSelectionStrategy: {{ .Values.kproximate.config.nodeSelectionStrategy | quote }}
+  minAvailableCpuCores: {{ .Values.kproximate.config.minAvailableCpuCores | quote }}
+  minAvailableMemoryMB: {{ .Values.kproximate.config.minAvailableMemoryMB | quote }}
+  excludedNodes: {{ .Values.kproximate.config.excludedNodes | quote }}
   rabbitMQHost: {{ .Values.kproximate.config.rabbitMQHost | quote }}
   rabbitMQPort: {{ .Values.kproximate.config.rabbitMQPort | quote }}
   rabbitMQUser: {{ .Values.rabbitmq.auth.username | quote }}
