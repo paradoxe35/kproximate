@@ -35,12 +35,46 @@ Kproximate will scale upwards as fast as it can provision VMs in the cluster lim
 Scaling events are asyncronous so if new resources requests are found on the cluster while a scaling event is in progress then an additional scaling event will be triggered if the initial scaling event will not be able to satisfy the new resource requests.
 
 ## Proxmox Host Targeting
-To select a Proxmox host for a new kproximate node all Proxmox hosts in the cluster are assessed and the following logic is applied:
-- Skip host if there is an existing scaling event targeting it
-- Skip host if there is an existing kproximate node on it
-- Select host as target for scaling event
+Kproximate supports multiple strategies for selecting Proxmox hosts when scaling up. The selection strategy can be configured using the `nodeSelectionStrategy` configuration option.
 
-If no host has been selected after all hosts have been assessed then the host with the most available memory is selected.
+### Available Strategies
+
+**Spread Strategy (Default)**
+- Distributes nodes across different Proxmox hosts
+- Skips hosts that already have a kproximate node or pending scaling event
+- Falls back to max memory strategy if no empty host is available
+
+**Max Memory Strategy**
+- Selects the host with the most available memory
+- Ideal for memory-intensive workloads
+
+**Max CPU Strategy**
+- Selects the host with the most available CPU (lowest CPU usage)
+- Ideal for CPU-intensive workloads
+
+**Balanced Strategy**
+- Selects the host with the best combined CPU and memory availability
+- Provides optimal resource distribution
+
+**Round Robin Strategy**
+- Cycles through available hosts in sequence
+- Ensures even distribution across all eligible hosts
+
+### Resource Restrictions
+You can configure minimum resource requirements that hosts must meet to be eligible for scaling:
+
+- `minAvailableCpuCores`: Minimum available CPU cores required
+- `minAvailableMemoryMB`: Minimum available memory in MB required
+
+Hosts that don't meet these requirements will be excluded from selection.
+
+### Node Exclusion
+You can exclude specific Proxmox nodes from scaling operations using the `excludedNodes` configuration option. This is useful for:
+- Nodes under maintenance
+- Nodes dedicated to specific workloads
+- Nodes with resource constraints
+
+Example: `excludedNodes: "proxmox-node-1,proxmox-node-maintenance"`
 
 ## Scaling Down
 Scaling down is very agressive. When the cluster is not scaling and the cluster's load is calculated to be satisfiable by n-1 nodes while also remaining within the configured load headroom value then a negative scale event is triggered. The node with the least allocated resources is selected and all pods are evicted from it before it is removed from the cluster and deleted.

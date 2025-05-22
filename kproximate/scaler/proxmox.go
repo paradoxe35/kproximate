@@ -19,9 +19,10 @@ import (
 )
 
 type ProxmoxScaler struct {
-	config     config.KproximateConfig
-	Kubernetes kubernetes.Kubernetes
-	Proxmox    proxmox.Proxmox
+	config       config.KproximateConfig
+	Kubernetes   kubernetes.Kubernetes
+	Proxmox      proxmox.Proxmox
+	nodeSelector *NodeSelector
 }
 
 func NewProxmoxScaler(config config.KproximateConfig) (Scaler, error) {
@@ -51,9 +52,10 @@ func NewProxmoxScaler(config config.KproximateConfig) (Scaler, error) {
 	}
 
 	scaler := ProxmoxScaler{
-		config:     config,
-		Kubernetes: &kubernetes,
-		Proxmox:    &proxmox,
+		config:       config,
+		Kubernetes:   &kubernetes,
+		Proxmox:      &proxmox,
+		nodeSelector: NewNodeSelector(config),
 	}
 
 	return &scaler, err
@@ -138,39 +140,39 @@ func (scaler *ProxmoxScaler) RequiredScaleEvents(allScaleEvents int) ([]*ScaleEv
 	return scaler.requiredScaleEvents(unschedulableResources, allScaleEvents)
 }
 
-func selectTargetHost(hosts []proxmox.HostInformation, kpNodes []proxmox.VmInformation, scaleEvents []*ScaleEvent) proxmox.HostInformation {
-skipHost:
-	for _, host := range hosts {
-		// Check for a scaleEvent targeting the pHost
-		for _, scaleEvent := range scaleEvents {
-			if scaleEvent.TargetHost.Node == host.Node {
-				continue skipHost
-			}
-		}
+// func selectTargetHost(hosts []proxmox.HostInformation, kpNodes []proxmox.VmInformation, scaleEvents []*ScaleEvent) proxmox.HostInformation {
+// skipHost:
+// 	for _, host := range hosts {
+// 		// Check for a scaleEvent targeting the pHost
+// 		for _, scaleEvent := range scaleEvents {
+// 			if scaleEvent.TargetHost.Node == host.Node {
+// 				continue skipHost
+// 			}
+// 		}
 
-		for _, kpNode := range kpNodes {
-			// Check for an existing kpNode on the pHost
-			if kpNode.Node == host.Node {
-				continue skipHost
-			}
-		}
+// 		for _, kpNode := range kpNodes {
+// 			// Check for an existing kpNode on the pHost
+// 			if kpNode.Node == host.Node {
+// 				continue skipHost
+// 			}
+// 		}
 
-		return host
-	}
+// 		return host
+// 	}
 
-	return selectMaxAvailableMemHost(hosts)
-}
+// 	return selectMaxAvailableMemHost(hosts)
+// }
 
-func selectMaxAvailableMemHost(hosts []proxmox.HostInformation) proxmox.HostInformation {
-	selectedHostHost := hosts[0]
-	for _, host := range hosts {
-		if (host.Maxmem - host.Mem) > (selectedHostHost.Maxmem - selectedHostHost.Mem) {
-			selectedHostHost = host
-		}
-	}
+// func selectMaxAvailableMemHost(hosts []proxmox.HostInformation) proxmox.HostInformation {
+// 	selectedHostHost := hosts[0]
+// 	for _, host := range hosts {
+// 		if (host.Maxmem - host.Mem) > (selectedHostHost.Maxmem - selectedHostHost.Mem) {
+// 			selectedHostHost = host
+// 		}
+// 	}
 
-	return selectedHostHost
-}
+// 	return selectedHostHost
+// }
 
 func (scaler *ProxmoxScaler) SelectTargetHosts(scaleEvents []*ScaleEvent) error {
 	hosts, err := scaler.Proxmox.GetClusterStats()
@@ -183,9 +185,13 @@ func (scaler *ProxmoxScaler) SelectTargetHosts(scaleEvents []*ScaleEvent) error 
 		return err
 	}
 
+	// Log the strategy being used
+	logger.InfoLog(fmt.Sprintf("Using node selection strategy: %s", scaler.nodeSelector.GetStrategyDescription()))
+
 	for _, scaleEvent := range scaleEvents {
-		scaleEvent.TargetHost = selectTargetHost(hosts, kpNodes, scaleEvents)
-		logger.DebugLog(fmt.Sprintf("Selected target host %s for %s", scaleEvent.TargetHost.Node, scaleEvent.NodeName))
+		scaleEvent.TargetHost = scaler.nodeSelector.SelectTargetHost(hosts, kpNodes, scaleEvents)
+		logger.DebugLog(fmt.Sprintf("Selected target host %s for %s using %s strategy",
+			scaleEvent.TargetHost.Node, scaleEvent.NodeName, scaler.config.NodeSelectionStrategy))
 	}
 
 	return nil
@@ -374,14 +380,50 @@ func (scaler *ProxmoxScaler) assessScaleDownForResourceType(currentResourceAlloc
 		return true
 	}
 
+	// Prevent division by zero or scaling down below the capacity of a single node
+	if totalResourceAllocatable <= kpNodeResourceCapacity {
+		logger.DebugLog("AssessScaleDown: Total allocatable is less than or equal to a single node's capacity, preventing scale down.",
+			"totalAllocatable", totalResourceAllocatable,
+			"kpNodeResourceCapacity", kpNodeResourceCapacity,
+		)
+		return false
+	}
+
+	// Calculate the total allocatable resources AFTER removing one node
+	newTotalAllocatable := totalResourceAllocatable - kpNodeResourceCapacity
+
+	// Calculate the projected load percentage on the cluster AFTER removing one node
+	// Use float64 for calculation to avoid integer truncation
+	projectedLoad := currentResourceAllocated / float64(newTotalAllocatable)
+
+	// Calculate the maximum acceptable load percentage based on headroom
+	maxAcceptableLoad := 1.0 - scaler.config.LoadHeadroom
+
+	allowScaleDown := projectedLoad < maxAcceptableLoad
+
+	logger.DebugLog("Assessing scale down for resource type",
+		"currentAllocated", currentResourceAllocated,
+		"totalAllocatable", totalResourceAllocatable,
+		"nodeCapacity", kpNodeResourceCapacity,
+		"newTotalAllocatable", newTotalAllocatable,
+		"projectedLoad", projectedLoad,
+		"maxAcceptableLoad", maxAcceptableLoad,
+		"loadHeadroom", scaler.config.LoadHeadroom,
+		"allowScaleDown", allowScaleDown,
+	)
+
+	// Allow scale down only if the projected load is less than the maximum acceptable load
+	return allowScaleDown
+
+	// OLD VERSION
 	// The proportion of the cluster's total allocatable resources currently allocated
 	// represented as a float between 0 and 1
-	totalResourceLoad := currentResourceAllocated / float64(totalResourceAllocatable)
-	// The expected resource load after scaledown
-	totalCapacityAfterScaleDown := (float64(totalResourceAllocatable-int64(kpNodeResourceCapacity)) / float64(totalResourceAllocatable))
-	acceptableResourceLoadForScaleDown := totalCapacityAfterScaleDown - (totalResourceLoad * scaler.config.LoadHeadroom)
+	// totalResourceLoad := currentResourceAllocated / float64(totalResourceAllocatable)
+	// // The expected resource load after scaledown
+	// totalCapacityAfterScaleDown := (float64(totalResourceAllocatable-int64(kpNodeResourceCapacity)) / float64(totalResourceAllocatable))
+	// acceptableResourceLoadForScaleDown := totalCapacityAfterScaleDown - (totalResourceLoad * scaler.config.LoadHeadroom)
 
-	return totalResourceLoad < acceptableResourceLoadForScaleDown
+	// return totalResourceLoad < acceptableResourceLoadForScaleDown
 }
 
 func (scaler *ProxmoxScaler) selectScaleDownTarget(scaleEvent *ScaleEvent) error {

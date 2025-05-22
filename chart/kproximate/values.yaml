@@ -7,11 +7,11 @@ kproximate:
     ## Verbose logging
     debug: false
 
-    ## The period to wait for a provisioned node to join the kubernetes cluster before the scaling 
+    ## The period to wait for a provisioned node to join the kubernetes cluster before the scaling
     ## event is declared to have failed.
     waitSecondsForJoin: 120
 
-    ## The period to wait for a new node to be provisioned and declared ready before the scaling 
+    ## The period to wait for a new node to be provisioned and declared ready before the scaling
     ## event is declared to have failed.
     waitSecondsForProvision: 120
 
@@ -29,8 +29,8 @@ kproximate:
     ## The amount of memory assigned to new kproximate nodes in MiB.
     kpNodeMemory: 2048
 
-    ## Set labels on kp nodes. A comma separated list of labels to apply to kp-nodes in 
-    ## the format "some.key=somevalue". It is also possible to use values only known at 
+    ## Set labels on kp nodes. A comma separated list of labels to apply to kp-nodes in
+    ## the format "some.key=somevalue". It is also possible to use values only known at
     ## provisioning time using go templating. Currently the only supported template value
     ## is "targetHost" which is the name of the proxmox host on which the kp-node is to be
     ## provsioned e.g. "topology.kubernetes.io/zone={{ targetHost }}".
@@ -47,7 +47,7 @@ kproximate:
 
     ## Set true if using local storage for templates.
     kpLocalTemplateStorage: false
-    
+
     ## The maximum number of kproximate nodes allowed.
     maxKpNodes: 3
 
@@ -66,6 +66,18 @@ kproximate:
     ## The number of seconds between polls of the cluster for scaling.
     pollInterval: 10
 
+    ## Node selection strategy for scaling up. Options: spread, max-memory, max-cpu, balanced, round-robin
+    nodeSelectionStrategy: spread
+
+    ## Minimum available CPU cores required for a Proxmox host to be eligible for scaling up
+    minAvailableCpuCores: 0
+
+    ## Minimum available memory in MB required for a Proxmox host to be eligible for scaling up
+    minAvailableMemoryMB: 0
+
+    ## Comma-separated list of Proxmox node names to exclude from scaling up
+    excludedNodes: ""
+
     ## The rabbitmq service address
     rabbitMQHost: kproximate-rabbitmq
 
@@ -74,8 +86,8 @@ kproximate:
 
   secrets:
     ## The command to use to join worker nodes to the kubernetes cluster.
-    kpJoinCommand: "" 
-    
+    kpJoinCommand: ""
+
     ## The user's Proxmox password
     pmPassword: "" ## Required if pmToken not set
 
@@ -100,7 +112,7 @@ rabbitmq:
     enabled: false
   extraPlugins: ""
   affinity:
-    nodeAffinity: 
+    nodeAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 1
           preference:
@@ -151,5 +163,5 @@ resources: {}
   #   memory: 128Mi
 
 nodeSelector: {}
-             
+
 tolerations: []

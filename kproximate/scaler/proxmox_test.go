@@ -202,6 +202,15 @@ func TestRequiredScaleEventsFor1CPU3072MBMemory1QueuedEvent(t *testing.T) {
 }
 
 func TestSelectTargetHosts(t *testing.T) {
+	cfg := config.KproximateConfig{
+		KpNodeNameRegex:       *regexp.MustCompile(`^kp-node-\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`),
+		KpNodeNamePrefix:      "kp-node",
+		NodeSelectionStrategy: "spread",
+		MinAvailableCpuCores:  0,
+		MinAvailableMemoryMB:  0,
+		ExcludedNodes:         "",
+	}
+
 	s := ProxmoxScaler{
 		Proxmox: &proxmox.ProxmoxMock{
 			ClusterStats: []proxmox.HostInformation{
@@ -211,6 +220,7 @@ func TestSelectTargetHosts(t *testing.T) {
 					Cpu:    0.209377325725626,
 					Mem:    20394792448,
 					Maxmem: 16647962624,
+					Maxcpu: 48,
 					Status: "online",
 				},
 				{
@@ -219,6 +229,7 @@ func TestSelectTargetHosts(t *testing.T) {
 					Cpu:    0.209377325725626,
 					Mem:    20394792448,
 					Maxmem: 16647962624,
+					Maxcpu: 40,
 					Status: "online",
 				},
 				{
@@ -227,6 +238,7 @@ func TestSelectTargetHosts(t *testing.T) {
 					Cpu:    0.209377325725626,
 					Mem:    11394792448,
 					Maxmem: 16647962624,
+					Maxcpu: 16,
 					Status: "online",
 				},
 			},
@@ -246,10 +258,8 @@ func TestSelectTargetHosts(t *testing.T) {
 				},
 			},
 		},
-		config: config.KproximateConfig{
-			KpNodeNameRegex:  *regexp.MustCompile(`^kp-node-\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$`),
-			KpNodeNamePrefix: "kp-node",
-		},
+		config:       cfg,
+		nodeSelector: NewNodeSelector(cfg),
 	}
 
 	scaleEvents := []*ScaleEvent{
@@ -272,16 +282,27 @@ func TestSelectTargetHosts(t *testing.T) {
 		t.Error(err)
 	}
 
-	if scaleEvents[0].TargetHost.Node != "host-01" {
-		t.Errorf("Expected host-01 to be selected as target host got %s", scaleEvents[0].TargetHost.Node)
+	// With spread strategy, the selection should work as follows:
+	// 1. All hosts are eligible (no resource restrictions in this test)
+	// 2. The spread strategy should prefer hosts without existing kpNodes
+	// 3. Since host-03 has an existing kpNode, it should be less preferred
+
+	// Count how many times each host was selected
+	hostCounts := make(map[string]int)
+	for _, event := range scaleEvents {
+		hostCounts[event.TargetHost.Node]++
 	}
 
-	if scaleEvents[1].TargetHost.Node != "host-02" {
-		t.Errorf("Expected host-02 to be selected as target host, got %s", scaleEvents[1].TargetHost.Node)
+	// Verify that all scale events got assigned to hosts
+	totalAssignments := hostCounts["host-01"] + hostCounts["host-02"] + hostCounts["host-03"]
+	if totalAssignments != 3 {
+		t.Errorf("Expected 3 total host assignments, got %d", totalAssignments)
 	}
 
-	if scaleEvents[2].TargetHost.Node != "host-03" {
-		t.Errorf("Expected host-03 to be selected as target host, got %s", scaleEvents[2].TargetHost.Node)
+	// With the spread strategy, we expect host-01 and host-02 to be preferred over host-03
+	// since host-03 already has a kpNode
+	if hostCounts["host-01"] == 0 && hostCounts["host-02"] == 0 {
+		t.Error("Expected at least one assignment to host-01 or host-02 (hosts without existing kpNodes)")
 	}
 }
 

@@ -32,6 +32,12 @@ type KproximateConfig struct {
 	SshKey                  string  `env:"sshKey"`
 	WaitSecondsForJoin      int     `env:"waitSecondsForJoin"`
 	WaitSecondsForProvision int     `env:"waitSecondsForProvision"`
+
+	// Node Selection Strategy Configuration
+	NodeSelectionStrategy string `env:"nodeSelectionStrategy,default=spread"`
+	MinAvailableCpuCores  int    `env:"minAvailableCpuCores,default=0"`
+	MinAvailableMemoryMB  int    `env:"minAvailableMemoryMB,default=0"`
+	ExcludedNodes         string `env:"excludedNodes"`
 }
 
 type RabbitConfig struct {
@@ -81,6 +87,30 @@ func validateConfig(config *KproximateConfig) KproximateConfig {
 
 	if config.WaitSecondsForProvision < 60 {
 		config.WaitSecondsForProvision = 60
+	}
+
+	// replace all \n with actual newlines
+	config.KpJoinCommand = regexp.MustCompile(`\\n`).ReplaceAllString(config.KpJoinCommand, "\n")
+
+	// Validate node selection strategy
+	validStrategies := map[string]bool{
+		"spread":      true,
+		"max-memory":  true,
+		"max-cpu":     true,
+		"balanced":    true,
+		"round-robin": true,
+	}
+	if !validStrategies[config.NodeSelectionStrategy] {
+		config.NodeSelectionStrategy = "spread"
+	}
+
+	// Ensure minimum resource requirements are non-negative
+	if config.MinAvailableCpuCores < 0 {
+		config.MinAvailableCpuCores = 0
+	}
+
+	if config.MinAvailableMemoryMB < 0 {
+		config.MinAvailableMemoryMB = 0
 	}
 
 	return *config
