@@ -43,6 +43,12 @@ LOAD_HEADROOM=0.2
 WAIT_SECONDS_FOR_JOIN=60
 WAIT_SECONDS_FOR_PROVISION=60
 
+# Node selection strategy configuration
+NODE_SELECTION_STRATEGY="spread"
+MIN_AVAILABLE_CPU_CORES=0
+MIN_AVAILABLE_MEMORY_MB=0
+EXCLUDED_NODES=""
+
 # Load environment variables from .env.dev if it exists
 ENV_FILE="$SCRIPT_DIR/.env.dev"
 if [ -f "$ENV_FILE" ]; then
@@ -127,6 +133,22 @@ while [[ $# -gt 0 ]]; do
             KP_NODE_TEMPLATE_NAME="$2"
             shift 2
             ;;
+        --node-selection-strategy)
+            NODE_SELECTION_STRATEGY="$2"
+            shift 2
+            ;;
+        --min-available-cpu-cores)
+            MIN_AVAILABLE_CPU_CORES="$2"
+            shift 2
+            ;;
+        --min-available-memory-mb)
+            MIN_AVAILABLE_MEMORY_MB="$2"
+            shift 2
+            ;;
+        --excluded-nodes)
+            EXCLUDED_NODES="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [options]"
             echo "Options:"
@@ -141,6 +163,11 @@ while [[ $# -gt 0 ]]; do
             echo "  --pm-password <password>             Proxmox password"
             echo "  --pm-token <token>                   Proxmox token"
             echo "  --kp-node-template-name <name>       Kproximate node template name"
+            echo "  --node-selection-strategy <strategy> Node selection strategy (default: spread)"
+            echo "                                       Options: spread, max-memory, max-cpu, balanced, round-robin"
+            echo "  --min-available-cpu-cores <number>   Minimum available CPU cores required (default: 0)"
+            echo "  --min-available-memory-mb <number>   Minimum available memory in MB required (default: 0)"
+            echo "  --excluded-nodes <nodes>             Comma-separated list of nodes to exclude (default: \"\")"
             echo "  --help                               Show this help message"
             echo ""
             echo "Environment variables can also be set in $SCRIPT_DIR/.env.dev"
@@ -258,6 +285,12 @@ else
     print_warning "kpJoinCommand is not set. Nodes will not be able to join the Kubernetes cluster."
     print_warning "Set KP_JOIN_COMMAND in your .env.dev file."
 fi
+
+# Node selection strategy configuration
+export nodeSelectionStrategy=${NODE_SELECTION_STRATEGY:-"spread"}
+export minAvailableCpuCores=${MIN_AVAILABLE_CPU_CORES:-0}
+export minAvailableMemoryMB=${MIN_AVAILABLE_MEMORY_MB:-0}
+export excludedNodes=${EXCLUDED_NODES:-""}
 
 # Change to project root directory
 cd $PROJECT_ROOT
