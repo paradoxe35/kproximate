@@ -89,6 +89,9 @@ func validateConfig(config *KproximateConfig) KproximateConfig {
 		config.WaitSecondsForProvision = 60
 	}
 
+	// replace all \n with actual newlines
+	config.KpJoinCommand = regexp.MustCompile(`\\n`).ReplaceAllString(config.KpJoinCommand, "\n")
+
 	// Validate node selection strategy
 	validStrategies := map[string]bool{
 		"spread":      true,

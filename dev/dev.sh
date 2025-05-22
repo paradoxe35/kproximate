@@ -54,19 +54,23 @@ ENV_FILE="$SCRIPT_DIR/.env.dev"
 if [ -f "$ENV_FILE" ]; then
     print_info "Loading environment variables from $ENV_FILE"
 
-    # Read .env.dev file and export variables
     while IFS= read -r line || [[ -n "$line" ]]; do
         # Skip comments and empty lines
-        if [[ $line =~ ^#.*$ ]] || [[ -z $line ]]; then
+        if [[ "$line" =~ ^\s*#.*$ || -z "$line" ]]; then
             continue
         fi
 
-        # Export the variable
-        export "$line"
+        # Split the line into key and value
+        key=$(echo "$line" | cut -d '=' -f 1)
+        value=$(echo "$line" | cut -d '=' -f 2-)
 
-        # Extract variable name for logging
-        var_name=$(echo "$line" | cut -d= -f1)
-        print_info "Loaded $var_name"
+        # Remove single quotes, double quotes, and leading/trailing spaces from the value
+        value=$(echo "$value" | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' -e 's/^[ \t]*//;s/[ \t]*$//')
+
+        # Export the key and value as environment variables
+        export "$key=$value"
+
+        print_info "Loaded $key"
     done < "$ENV_FILE"
 else
     print_warning "$ENV_FILE not found. Using default values."

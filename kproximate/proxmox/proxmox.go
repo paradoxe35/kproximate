@@ -280,6 +280,8 @@ func (p *ProxmoxClient) CheckNodeReady(ctx context.Context, nodeName string) err
 		time.Sleep(time.Second * 1)
 	}
 
+	time.Sleep(time.Second * 20)
+
 	return nil
 }
 
