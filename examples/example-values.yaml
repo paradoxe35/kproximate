@@ -39,7 +39,7 @@ kproximate:
   secrets:
     pmToken: token-here
     kpJoinCommand: |
-      curl --proto '=https' --tlsv1.2 -sSf https://get.k0s.sh | sudo K0S_VERSION=v1.32.1+k0s.0 sh
+      curl --proto '=https' --tlsv1.2 -sSf https://get.k0s.sh | sudo K0S_VERSION=v1.33.1+k0s.0 sh
       JOIN_TOKEN="------"
       echo $JOIN_TOKEN > /tmp/join-token
       sudo k0s install worker --token-file /tmp/join-token
