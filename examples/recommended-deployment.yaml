@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  # Adjust replicas based on your cluster capacity
+  # With 3 worker nodes at 4GB each, you have 12GB total memory
+  # Each pod requests 1GB, so you can fit 12 pods theoretically
+  # But leave some headroom for system components
+  replicas: 8
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          resources:
+            limits:
+              cpu: "1"
+              # Make sure limits are reasonable for your node size
+              memory: "1536Mi"
+            requests:
+              cpu: "0.5"
+              # Reduce memory requests to allow more pods per node
+              memory: "768Mi"
+          image: nginx:1.14.2
+          ports:
+            - containerPort: 80
