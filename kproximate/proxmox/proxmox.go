@@ -16,12 +16,19 @@ var exitStatusSuccess = regexp.MustCompile(`^(OK|WARNINGS)`)
 var userRequiresTokenRegex = regexp.MustCompile("[a-z0-9]+@[a-z0-9]+![a-z0-9]+")
 
 type HostInformation struct {
-	Id     string  `json:"id"`
-	Node   string  `json:"node"`
-	Cpu    float64 `json:"cpu"`
-	Mem    int64   `json:"mem"`
-	Maxmem int64   `json:"maxmem"`
-	Status string  `json:"status"`
+	Id         string  `json:"id"`
+	Node       string  `json:"node"`
+	Cpu        float64 `json:"cpu"`
+	Mem        int64   `json:"mem"`
+	Maxmem     int64   `json:"maxmem"`
+	Status     string  `json:"status"`
+	CgroupMode int     `json:"cgroup-mode"`
+	Disk       int64   `json:"disk"`
+	Level      string  `json:"level"`
+	Maxcpu     int     `json:"maxcpu"`
+	Maxdisk    int64   `json:"maxdisk"`
+	Type       string  `json:"type"`
+	Uptime     int64   `json:"uptime"`
 }
 
 type vmList struct {

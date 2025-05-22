@@ -39,9 +39,9 @@ func TestSelectTargetHost_SpreadStrategy(t *testing.T) {
 	selector := NewNodeSelector(cfg)
 
 	hosts := []proxmox.HostInformation{
-		{Node: "host1", Cpu: 0.2, Mem: 8000000000, Maxmem: 16000000000},
-		{Node: "host2", Cpu: 0.3, Mem: 12000000000, Maxmem: 16000000000},
-		{Node: "host3", Cpu: 0.1, Mem: 4000000000, Maxmem: 16000000000},
+		{Node: "host1", Cpu: 0.2, Mem: 8000000000, Maxmem: 16000000000, Maxcpu: 8},
+		{Node: "host2", Cpu: 0.3, Mem: 12000000000, Maxmem: 16000000000, Maxcpu: 8},
+		{Node: "host3", Cpu: 0.1, Mem: 4000000000, Maxmem: 16000000000, Maxcpu: 8},
 	}
 
 	kpNodes := []proxmox.VmInformation{
@@ -69,9 +69,9 @@ func TestSelectTargetHost_MaxMemoryStrategy(t *testing.T) {
 	selector := NewNodeSelector(cfg)
 
 	hosts := []proxmox.HostInformation{
-		{Node: "host1", Cpu: 0.2, Mem: 8000000000, Maxmem: 16000000000},  // 8GB available
-		{Node: "host2", Cpu: 0.3, Mem: 4000000000, Maxmem: 16000000000},  // 12GB available
-		{Node: "host3", Cpu: 0.1, Mem: 12000000000, Maxmem: 16000000000}, // 4GB available
+		{Node: "host1", Cpu: 0.2, Mem: 8000000000, Maxmem: 16000000000, Maxcpu: 8},  // 8GB available
+		{Node: "host2", Cpu: 0.3, Mem: 4000000000, Maxmem: 16000000000, Maxcpu: 8},  // 12GB available
+		{Node: "host3", Cpu: 0.1, Mem: 12000000000, Maxmem: 16000000000, Maxcpu: 8}, // 4GB available
 	}
 
 	kpNodes := []proxmox.VmInformation{}
@@ -96,9 +96,9 @@ func TestSelectTargetHost_MaxCpuStrategy(t *testing.T) {
 	selector := NewNodeSelector(cfg)
 
 	hosts := []proxmox.HostInformation{
-		{Node: "host1", Cpu: 0.8, Mem: 8000000000, Maxmem: 16000000000},  // High CPU usage
-		{Node: "host2", Cpu: 0.1, Mem: 4000000000, Maxmem: 16000000000},  // Low CPU usage
-		{Node: "host3", Cpu: 0.5, Mem: 12000000000, Maxmem: 16000000000}, // Medium CPU usage
+		{Node: "host1", Cpu: 0.8, Mem: 8000000000, Maxmem: 16000000000, Maxcpu: 8},  // High CPU usage
+		{Node: "host2", Cpu: 0.1, Mem: 4000000000, Maxmem: 16000000000, Maxcpu: 8},  // Low CPU usage
+		{Node: "host3", Cpu: 0.5, Mem: 12000000000, Maxmem: 16000000000, Maxcpu: 8}, // Medium CPU usage
 	}
 
 	kpNodes := []proxmox.VmInformation{}
@@ -123,9 +123,9 @@ func TestSelectTargetHost_ExcludedNodes(t *testing.T) {
 	selector := NewNodeSelector(cfg)
 
 	hosts := []proxmox.HostInformation{
-		{Node: "host1", Cpu: 0.2, Mem: 8000000000, Maxmem: 16000000000},
-		{Node: "host2", Cpu: 0.3, Mem: 12000000000, Maxmem: 16000000000},
-		{Node: "host3", Cpu: 0.1, Mem: 4000000000, Maxmem: 16000000000},
+		{Node: "host1", Cpu: 0.2, Mem: 8000000000, Maxmem: 16000000000, Maxcpu: 8},
+		{Node: "host2", Cpu: 0.3, Mem: 12000000000, Maxmem: 16000000000, Maxcpu: 8},
+		{Node: "host3", Cpu: 0.1, Mem: 4000000000, Maxmem: 16000000000, Maxcpu: 8},
 	}
 
 	kpNodes := []proxmox.VmInformation{}
@@ -151,11 +151,11 @@ func TestSelectTargetHost_ResourceRequirements(t *testing.T) {
 
 	hosts := []proxmox.HostInformation{
 		// host1: Low available memory (4GB), should be filtered out
-		{Node: "host1", Cpu: 0.2, Mem: 12000000000, Maxmem: 16000000000},
+		{Node: "host1", Cpu: 0.2, Mem: 12000000000, Maxmem: 16000000000, Maxcpu: 8},
 		// host2: Good available memory (12GB), should be eligible
-		{Node: "host2", Cpu: 0.3, Mem: 4000000000, Maxmem: 16000000000},
+		{Node: "host2", Cpu: 0.3, Mem: 4000000000, Maxmem: 16000000000, Maxcpu: 8},
 		// host3: Medium available memory (8GB), should be eligible
-		{Node: "host3", Cpu: 0.1, Mem: 8000000000, Maxmem: 16000000000},
+		{Node: "host3", Cpu: 0.1, Mem: 8000000000, Maxmem: 16000000000, Maxcpu: 8},
 	}
 
 	kpNodes := []proxmox.VmInformation{}
@@ -180,9 +180,9 @@ func TestSelectTargetHost_RoundRobin(t *testing.T) {
 	selector := NewNodeSelector(cfg)
 
 	hosts := []proxmox.HostInformation{
-		{Node: "host1", Cpu: 0.2, Mem: 8000000000, Maxmem: 16000000000},
-		{Node: "host2", Cpu: 0.3, Mem: 12000000000, Maxmem: 16000000000},
-		{Node: "host3", Cpu: 0.1, Mem: 4000000000, Maxmem: 16000000000},
+		{Node: "host1", Cpu: 0.2, Mem: 8000000000, Maxmem: 16000000000, Maxcpu: 8},
+		{Node: "host2", Cpu: 0.3, Mem: 12000000000, Maxmem: 16000000000, Maxcpu: 8},
+		{Node: "host3", Cpu: 0.1, Mem: 4000000000, Maxmem: 16000000000, Maxcpu: 8},
 	}
 
 	kpNodes := []proxmox.VmInformation{}
@@ -232,9 +232,9 @@ func TestGetStrategyDescription(t *testing.T) {
 
 // Helper function to check if string contains substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
-		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		containsInMiddle(s, substr))))
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			containsInMiddle(s, substr))))
 }
 
 func containsInMiddle(s, substr string) bool {

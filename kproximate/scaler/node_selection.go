@@ -110,12 +110,10 @@ func (ns *NodeSelector) meetsResourceRequirements(host proxmox.HostInformation) 
 	// Calculate available resources
 	availableMemoryMB := (host.Maxmem - host.Mem) / (1024 * 1024) // Convert bytes to MB
 
-	// For CPU, we need to calculate available cores
-	// Assuming host.Cpu is a percentage (0.0 to 1.0) of total CPU usage
-	// We need to estimate total cores - this is a limitation of the current API
-	// For now, we'll use a simple heuristic: if CPU usage is high, consider fewer cores available
-	estimatedTotalCores := 8 // This should ideally come from the API or configuration
-	availableCores := int(float64(estimatedTotalCores) * (1.0 - host.Cpu))
+	// Calculate available CPU cores using the actual Maxcpu field
+	// host.Cpu is a percentage (0.0 to 1.0) of total CPU usage
+	// host.Maxcpu is the total number of CPU cores available on the host
+	availableCores := int(float64(host.Maxcpu) * (1.0 - host.Cpu))
 
 	return availableCores >= ns.config.MinAvailableCpuCores &&
 		int(availableMemoryMB) >= ns.config.MinAvailableMemoryMB

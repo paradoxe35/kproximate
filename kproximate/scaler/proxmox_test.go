@@ -220,6 +220,7 @@ func TestSelectTargetHosts(t *testing.T) {
 					Cpu:    0.209377325725626,
 					Mem:    20394792448,
 					Maxmem: 16647962624,
+					Maxcpu: 48,
 					Status: "online",
 				},
 				{
@@ -228,6 +229,7 @@ func TestSelectTargetHosts(t *testing.T) {
 					Cpu:    0.209377325725626,
 					Mem:    20394792448,
 					Maxmem: 16647962624,
+					Maxcpu: 40,
 					Status: "online",
 				},
 				{
@@ -236,6 +238,7 @@ func TestSelectTargetHosts(t *testing.T) {
 					Cpu:    0.209377325725626,
 					Mem:    11394792448,
 					Maxmem: 16647962624,
+					Maxcpu: 16,
 					Status: "online",
 				},
 			},
