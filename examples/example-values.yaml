@@ -1,19 +1,36 @@
 kproximate:
   config:
-    kpNodeCores: 2
-    kpNodeMemory: 2048
+    debug: true
+    # Set to match your actual node cores
+    kpNodeCores: 4
+    # Set to match your actual node memory in MiB (4GB = 4096 MiB)
+    kpNodeMemory: 4096
     kpNodeNamePrefix: kp-node
-    kpNodeTemplateName: kproximate-template
+    kpNodeTemplateName: ubuntu-22.04-cloudinit-template
     kpNodeLabels: "topology.kubernetes.io/region=proxmox-cluster,topology.kubernetes.io/zone={{ .TargetHost }}"
-    loadHeadroom: 0.2
+    # Increase headroom to prevent rapid scale up/down cycles
+    loadHeadroom: 0.3
+    # Adjust based on your Proxmox capacity
     maxKpNodes: 4
-    pmUrl: https://<proxmox-host>:8006/api2/json
+    kpLocalTemplateStorage: true
+    pmUrl: https://proxmox.example.com:8006/api2/json
     pmUserID: kproximate@pam!kproximate
+    kpQemuExecJoin: true
+    # Increase wait times to allow nodes to fully join
+    waitSecondsForJoin: 600
+    waitSecondsForProvision: 600
 
   secrets:
-    pmToken: <proxmox-api-token>
-    sshKey: <ssh-public-key>
+    pmToken: token-here
+    kpJoinCommand: |
+      curl --proto '=https' --tlsv1.2 -sSf https://get.k0s.sh | sudo K0S_VERSION=v1.32.1+k0s.0 sh
+      JOIN_TOKEN="------"
+      echo $JOIN_TOKEN > /tmp/join-token
+      sudo k0s install worker --token-file /tmp/join-token
+      sudo k0s start
+
+workerReplicaCount: 1
 
 rabbitmq:
   auth:
-    password: <set-rabbitmq-password-here>
+    password: password
