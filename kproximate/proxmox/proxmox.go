@@ -10,7 +10,6 @@ import (
 
 	"github.com/Telmate/proxmox-api-go/proxmox"
 	"github.com/mitchellh/mapstructure"
-	"github.com/paradoxe35/kproximate/logger"
 )
 
 var exitStatusSuccess = regexp.MustCompile(`^(OK|WARNINGS)`)
@@ -129,9 +128,6 @@ func (p *ProxmoxClient) GetClusterStats() ([]HostInformation, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// Logger.InfoLog("Cluster stats", "hosts", pHosts)
-	logger.InfoLog("Cluster stats", "hosts", pHosts)
 
 	return pHosts, nil
 }
