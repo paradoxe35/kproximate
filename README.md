@@ -16,6 +16,10 @@ While it is a pretty niche project, some possible use cases include:
 - Something someone else thinks of that I haven't
 - Just because...
 
+## Credits
+
+This project is based on the original [kproximate](https://github.com/jedrw/kproximate) by [jedrw](https://github.com/jedrw), with additional fixes, improvements, and new features.
+
 ## Development
 
 For local development without Helm, see the [Development Guide](dev/README.md).
