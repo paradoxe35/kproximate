@@ -538,8 +538,8 @@ func (scaler *ProxmoxScaler) GetAllocatedResources() (AllocatedResources, error)
 	}
 
 	logger.DebugLog("Calculated total cluster allocated resources",
-		"totalCpu", scalerAllocatedResources.Cpu,
-		"totalMemory", scalerAllocatedResources.Memory,
+		"totalCpu", fmt.Sprintf("%.2f", scalerAllocatedResources.Cpu),
+		"totalMemory", fmt.Sprintf("%.2f", scalerAllocatedResources.Memory),
 	)
 
 	return scalerAllocatedResources, nil

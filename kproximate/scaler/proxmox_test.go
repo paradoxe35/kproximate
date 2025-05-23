@@ -439,6 +439,9 @@ func TestAssessScaleDownIsAcceptable(t *testing.T) {
 func TestAssessScaleDownIsUnacceptable(t *testing.T) {
 	s := ProxmoxScaler{
 		Kubernetes: &kubernetes.KubernetesMock{
+			// AllocatedResources is no longer directly used by GetAllocatedResources,
+			// but KpNodes might be derived from it if not explicitly set.
+			// We now need to set MockClusterAllocatedResources.
 			AllocatedResources: map[string]kubernetes.AllocatedResources{
 				"kp-node-163c3d58-4c4d-426d-baef-e0c30ecb5fcd": {
 					Cpu:    2.0,
@@ -471,7 +474,12 @@ func TestAssessScaleDownIsUnacceptable(t *testing.T) {
 			},
 			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
 				Cpu:    14,
-				Memory: 15032385536,
+				Memory: 15032385536, // 14336 MiB
+			},
+			// Set the cluster-wide allocated resources to what the sum of kp-node resources was
+			MockClusterAllocatedResources: kubernetes.AllocatedResources{
+				Cpu:    10.0,          // Sum of CPU from original AllocatedResources map
+				Memory: 10737418240.0, // Sum of Memory (10240 MiB)
 			},
 		},
 		config: config.KproximateConfig{
