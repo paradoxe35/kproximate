@@ -227,7 +227,7 @@ func consumeScaleDownMsg(ctx context.Context, kpScaler scaler.Scaler, scaleDownM
 // Constants for retry configuration
 const (
 	baseRetryDelaySec = 1    // 1 second
-	maxRetryDelaySec  = 3600 // 1 hour
+	maxRetryDelaySec  = 1800 // 30 minutes
 )
 
 // calculateRetryDelay implements exponential backoff
