@@ -1,43 +1,104 @@
 kproximate:
   config:
-    debug: true
-    # Set to match your actual node cores
-    kpNodeCores: 4
-    # Set to match your actual node memory in MiB (4GB = 4096 MiB)
-    kpNodeMemory: 4096
-    kpNodeNamePrefix: kp-node
-    kpNodeTemplateName: ubuntu-22.04-cloudinit-template
-    kpNodeLabels: "topology.kubernetes.io/region=proxmox-cluster,topology.kubernetes.io/zone={{ .TargetHost }}"
-    # Increase headroom to prevent rapid scale up/down cycles
-    loadHeadroom: 0.3
-    # Adjust based on your Proxmox capacity
-    maxKpNodes: 4
-    kpLocalTemplateStorage: true
-    pmUrl: https://proxmox.example.com:8006/api2/json
-    pmUserID: kproximate@pam!kproximate
-    kpQemuExecJoin: true
-    # Increase wait times to allow nodes to fully join
-    waitSecondsForJoin: 600
-    waitSecondsForProvision: 600
+    ## Verbose logging
+    debug: false
 
-    # Node selection strategy for scaling up. Options: spread, max-memory, max-cpu, balanced, round-robin
-    # if not set, defaults to "spread"
+    ## The period to wait for a provisioned node to join the kubernetes cluster before the scaling
+    ## event is declared to have failed.
+    waitSecondsForJoin: 120
+
+    ## The period to wait for a new node to be provisioned and declared ready before the scaling
+    ## event is declared to have failed.
+    waitSecondsForProvision: 120
+
+    ## The required headroom used in scale down calculations expressed as a value between 0
+    ## and 1. If a value below 0.2 is specified it will be ignored and the default value
+    ## is used.
+    loadHeadroom: 0.2
+
+    ## Scale-down stabilization period in minutes. Prevents scale-down if any node
+    ## was created within this period.
+    scaleDownStabilizationMinutes: 5
+
+    ## Minimum age in minutes before a node can be considered for scale-down.
+    ## This prevents newly created nodes from being immediately removed.
+    minNodeAgeMinutes: 10
+
+    ## The number of cores assigned to new kproximate nodes.
+    kpNodeCores: 2
+
+    ## The amount of memory assigned to new kproximate nodes in MiB.
+    kpNodeMemory: 4096
+
+    ## Set true to disable SSH key injection.
+    kpNodeDisableSsh: false
+
+    ## Set labels on kp nodes. A comma separated list of labels to apply to kp-nodes in
+    kpNodeLabels: "topology.kubernetes.io/region=proxmox-cluster,topology.kubernetes.io/zone={{ .TargetHost }}"
+
+    ## The prefix to use when naming new kproximate nodes.
+    kpNodeNamePrefix: kp-node
+
+    ## The name of the Proxmox template to use for new kproximate nodes.
+    kpNodeTemplateName: ubuntu-22.04-cloudinit-template
+
+    ## Set true to use Qemu-Exec to join nodes to the kubernetes cluster.
+    kpQemuExecJoin: true
+
+    ## Set true if using local storage for templates.
+    kpLocalTemplateStorage: true
+
+    ## The maximum number of kproximate nodes allowed.
+    maxKpNodes: 4
+
+    ## Set true to skip TLS checks for the Proxmox API.
+    pmAllowInsecure: false
+
+    ## Set true to enable debug output for Proxmox API calls.
+    pmDebug: false
+
+    ## The Proxmox API URL.
+    pmUrl: https://proxmox.example.com:8006/api2/json
+
+    ## The Proxmox API token ID or user ID.
+    pmUserID: kproximate@pam!kproximate
+
+    ## The number of seconds between polls of the cluster for scaling.
+    pollInterval: 10
+
+    # Node Selection Strategy Configuration
+    # Available strategies:
+    # - "spread": Distributes nodes across different Proxmox hosts (default)
+    # - "max-memory": Selects host with most available memory
+    # - "max-cpu": Selects host with most available CPU
+    # - "balanced": Selects host with best combined CPU and memory availability
+    # - "round-robin": Cycles through available hosts
     nodeSelectionStrategy: "balanced"
 
+    # Resource Restrictions
     # Minimum available CPU cores required for a host to be eligible for scaling up
     # Set to 0 to disable CPU-based filtering
-    minAvailableCpuCores: 2
+    minAvailableCpuCores: 4
 
     # Minimum available memory in MB required for a host to be eligible for scaling up
     # Set to 0 to disable memory-based filtering
-    minAvailableMemoryMB: 8192
+    minAvailableMemoryMB: 8192 # 8GB
 
     # Comma-separated list of Proxmox node names to exclude from scaling up
     # Useful for maintenance, dedicated workloads, or resource constraints
     excludedNodes: "proxmox-node-maintenance,proxmox-node-storage"
 
+    ## The rabbitmq service address
+    rabbitMQHost: kproximate-rabbitmq
+
+    ## The rabbitmq service port
+    rabbitMQPort: 5671
+
   secrets:
-    pmToken: token-here
+    ## The Proxmox API token for the token ID.
+    pmToken: proxmox-token-here
+
+    ## The command to use to join worker nodes to the kubernetes cluster.
     kpJoinCommand: |
       curl --proto '=https' --tlsv1.2 -sSf https://get.k0s.sh | sudo K0S_VERSION=v1.33.1+k0s.0 sh
       JOIN_TOKEN="------"
@@ -49,4 +110,4 @@ workerReplicaCount: 1
 
 rabbitmq:
   auth:
-    password: password
+    password: rabbitmq-password-here
