@@ -114,7 +114,7 @@ Your Proxmox API endpoint should also be accessible from this network. For examp
 
 ## Installing kproximate
 
-A helm chart is provided at oci://ghcr.io/paradoxe35 for installing the application into your kubernetes cluster. See [example-values.yaml](https://github.com/paradoxe35/kproximate/tree/main/examples/example-values.yaml) for a basic configuraton example.
+A helm chart is provided at `oci://ghcr.io/paradoxe35` for installing the application into your kubernetes cluster. See [example-values.yaml](https://github.com/paradoxe35/kproximate/tree/main/examples/example-values.yaml) for a basic configuraton example.
 
 Install kproximate:
 
