@@ -72,6 +72,10 @@ The value of `kpJoinCommand` is executed on the new node as follows: `bash -c <y
 
 The [create_kproximate_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_kproximate_template.sh) script creates a template that joins the Kubernetes cluster automatically on first boot.
 
+### Create generic template
+
+The [create_cloud_init_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_cloud_init_template.sh) script can be used as a guide to creating a cloud init template, Ubuntu, Alma Linux 9, Amazon Linux 2, CentOS 9, Fedora 38 etc.
+
 ### Using local storage
 
 Those wishing to use local storage can set `kpLocalTemplateStorage: true` in their configuration and create a template on each Proxmox node with an identical name but a different VMID.
