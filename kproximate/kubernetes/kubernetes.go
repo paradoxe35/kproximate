@@ -34,7 +34,7 @@ type Kubernetes interface {
 	GetKpNodes(kpNodeNameRegex regexp.Regexp) ([]apiv1.Node, error)
 	LabelKpNode(kpNodeName string, kpNodeLabels map[string]string) error
 	GetKpNodesAllocatedResources(kpNodeNameRegex regexp.Regexp) (map[string]AllocatedResources, error)
-	GetClusterAllocatedResources() (AllocatedResources, error) // New function
+	GetClusterAllocatedResources() (AllocatedResources, error)
 	CheckForNodeJoin(ctx context.Context, newKpNodeName string)
 	DeleteKpNode(ctx context.Context, kpNodeName string) error
 }

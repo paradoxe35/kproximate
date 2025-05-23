@@ -524,7 +524,7 @@ func (scaler *ProxmoxScaler) GetAllocatedResources() (AllocatedResources, error)
 	// Add a small delay to ensure we get the most up-to-date resource allocation
 	// This helps prevent race conditions where pods have been scheduled but
 	// the resource calculation hasn't been updated yet
-	time.Sleep(2 * time.Second) // This delay might still be relevant or could be re-evaluated
+	time.Sleep(2 * time.Second)
 
 	clusterAllocatedK8s, err := scaler.Kubernetes.GetClusterAllocatedResources()
 	if err != nil {
