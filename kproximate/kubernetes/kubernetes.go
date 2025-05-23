@@ -34,6 +34,7 @@ type Kubernetes interface {
 	GetKpNodes(kpNodeNameRegex regexp.Regexp) ([]apiv1.Node, error)
 	LabelKpNode(kpNodeName string, kpNodeLabels map[string]string) error
 	GetKpNodesAllocatedResources(kpNodeNameRegex regexp.Regexp) (map[string]AllocatedResources, error)
+	GetClusterAllocatedResources() (AllocatedResources, error) // New function
 	CheckForNodeJoin(ctx context.Context, newKpNodeName string)
 	DeleteKpNode(ctx context.Context, kpNodeName string) error
 }
@@ -282,6 +283,37 @@ func (k *KubernetesClient) GetKpNodesAllocatedResources(kpNodeNameRegex regexp.R
 	}
 
 	return allocatedResources, err
+}
+
+func (k *KubernetesClient) GetClusterAllocatedResources() (AllocatedResources, error) {
+	var clusterResources AllocatedResources
+	workerNodes, err := k.GetWorkerNodes() // Gets all worker nodes
+	if err != nil {
+		return clusterResources, err
+	}
+
+	for _, node := range workerNodes {
+		pods, err := k.client.CoreV1().Pods("").List(
+			context.TODO(),
+			metav1.ListOptions{
+				FieldSelector: fmt.Sprintf("spec.nodeName=%s", node.Name),
+			},
+		)
+		if err != nil {
+			// Log warning and continue, or return error?
+			// For now, let's log and continue to sum what we can.
+			logger.WarnLog(fmt.Sprintf("Failed to list pods for node %s, skipping its resources in cluster allocation calculation", node.Name), "error", err)
+			continue
+		}
+
+		for _, pod := range pods.Items {
+			for _, container := range pod.Spec.Containers {
+				clusterResources.Cpu += container.Resources.Requests.Cpu().AsApproximateFloat64()
+				clusterResources.Memory += container.Resources.Requests.Memory().AsApproximateFloat64()
+			}
+		}
+	}
+	return clusterResources, nil
 }
 
 func (k *KubernetesClient) CheckForNodeJoin(ctx context.Context, newKpNodeName string) {
