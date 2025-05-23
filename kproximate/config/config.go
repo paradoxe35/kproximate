@@ -33,6 +33,10 @@ type KproximateConfig struct {
 	WaitSecondsForJoin      int     `env:"waitSecondsForJoin"`
 	WaitSecondsForProvision int     `env:"waitSecondsForProvision"`
 
+	// Scale-down stabilization configuration
+	ScaleDownStabilizationMinutes int `env:"scaleDownStabilizationMinutes,default=5"`
+	MinNodeAgeMinutes             int `env:"minNodeAgeMinutes,default=10"`
+
 	// Node Selection Strategy Configuration
 	NodeSelectionStrategy string `env:"nodeSelectionStrategy,default=spread"`
 	MinAvailableCpuCores  int    `env:"minAvailableCpuCores,default=0"`
@@ -87,6 +91,15 @@ func validateConfig(config *KproximateConfig) KproximateConfig {
 
 	if config.WaitSecondsForProvision < 60 {
 		config.WaitSecondsForProvision = 60
+	}
+
+	// Validate scale-down stabilization settings
+	if config.ScaleDownStabilizationMinutes < 1 {
+		config.ScaleDownStabilizationMinutes = 5
+	}
+
+	if config.MinNodeAgeMinutes < 1 {
+		config.MinNodeAgeMinutes = 10
 	}
 
 	// replace all \n with actual newlines

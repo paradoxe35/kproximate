@@ -343,6 +343,12 @@ func (scaler *ProxmoxScaler) NumReadyNodes() (int, error) {
 }
 
 func (scaler *ProxmoxScaler) AssessScaleDown() (*ScaleEvent, error) {
+	// Check if we should prevent scale-down due to recent scaling activity
+	if scaler.shouldPreventScaleDown() {
+		logger.DebugLog("Scale-down prevented due to recent scaling activity or insufficient stabilization time")
+		return nil, nil
+	}
+
 	totalAllocatedResources, err := scaler.GetAllocatedResources()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get allocated resources: %w", err)
@@ -360,6 +366,10 @@ func (scaler *ProxmoxScaler) AssessScaleDown() (*ScaleEvent, error) {
 	acceptMemoryScaleDown := scaler.assessScaleDownForResourceType(totalAllocatedResources.Memory, totalMemoryAllocatable, int64(scaler.config.KpNodeMemory<<20))
 
 	if !(acceptCpuScaleDown && acceptMemoryScaleDown) {
+		logger.DebugLog("Scale-down rejected by resource assessment",
+			"acceptCpuScaleDown", acceptCpuScaleDown,
+			"acceptMemoryScaleDown", acceptMemoryScaleDown,
+		)
 		return nil, nil
 	}
 
@@ -372,6 +382,13 @@ func (scaler *ProxmoxScaler) AssessScaleDown() (*ScaleEvent, error) {
 		return nil, err
 	}
 
+	// Additional check: ensure the selected node is not too new
+	if scaler.isNodeTooNew(scaleEvent.NodeName) {
+		logger.DebugLog("Scale-down prevented: selected node is too new", "nodeName", scaleEvent.NodeName)
+		return nil, nil
+	}
+
+	logger.InfoLog("Scale-down assessment approved", "targetNode", scaleEvent.NodeName)
 	return &scaleEvent, nil
 }
 
@@ -505,6 +522,12 @@ func (scaler *ProxmoxScaler) GetAllocatableResources() (AllocatableResources, er
 
 func (scaler *ProxmoxScaler) GetAllocatedResources() (AllocatedResources, error) {
 	var allocatedResources AllocatedResources
+
+	// Add a small delay to ensure we get the most up-to-date resource allocation
+	// This helps prevent race conditions where pods have been scheduled but
+	// the resource calculation hasn't been updated yet
+	time.Sleep(2 * time.Second)
+
 	resources, err := scaler.Kubernetes.GetKpNodesAllocatedResources(scaler.config.KpNodeNameRegex)
 	if err != nil {
 		return allocatedResources, err
@@ -514,6 +537,12 @@ func (scaler *ProxmoxScaler) GetAllocatedResources() (AllocatedResources, error)
 		allocatedResources.Cpu += kpNode.Cpu
 		allocatedResources.Memory += kpNode.Memory
 	}
+
+	logger.DebugLog("Calculated total allocated resources",
+		"totalCpu", allocatedResources.Cpu,
+		"totalMemory", allocatedResources.Memory,
+		"nodeCount", len(resources),
+	)
 
 	return allocatedResources, nil
 }
@@ -533,4 +562,62 @@ func (scaler *ProxmoxScaler) GetResourceStatistics() (ResourceStatistics, error)
 		Allocatable: allocatableResources,
 		Allocated:   allocatedResources,
 	}, nil
+}
+
+// shouldPreventScaleDown checks if scale-down should be prevented due to recent scaling activity
+func (scaler *ProxmoxScaler) shouldPreventScaleDown() bool {
+	// Get all kp nodes to check their creation times
+	kpNodes, err := scaler.Kubernetes.GetKpNodes(scaler.config.KpNodeNameRegex)
+	if err != nil {
+		logger.WarnLog("Failed to get kp nodes for scale-down prevention check", "error", err.Error())
+		return true // Err on the side of caution
+	}
+
+	// Check if any node was created recently (configurable stabilization period)
+	stabilizationPeriod := time.Duration(scaler.config.ScaleDownStabilizationMinutes) * time.Minute
+	now := time.Now()
+
+	for _, node := range kpNodes {
+		nodeAge := now.Sub(node.CreationTimestamp.Time)
+		if nodeAge < stabilizationPeriod {
+			logger.DebugLog("Scale-down prevented: recent node found",
+				"nodeName", node.Name,
+				"nodeAge", nodeAge.String(),
+				"stabilizationPeriod", stabilizationPeriod.String(),
+			)
+			return true
+		}
+	}
+
+	return false
+}
+
+// isNodeTooNew checks if a specific node is too new to be scaled down
+func (scaler *ProxmoxScaler) isNodeTooNew(nodeName string) bool {
+	kpNodes, err := scaler.Kubernetes.GetKpNodes(scaler.config.KpNodeNameRegex)
+	if err != nil {
+		logger.WarnLog("Failed to get kp nodes for node age check", "error", err.Error())
+		return true // Err on the side of caution
+	}
+
+	// Find the specific node
+	for _, node := range kpNodes {
+		if node.Name == nodeName {
+			// Minimum age before a node can be considered for scale-down (configurable)
+			minNodeAge := time.Duration(scaler.config.MinNodeAgeMinutes) * time.Minute
+			nodeAge := time.Since(node.CreationTimestamp.Time)
+
+			if nodeAge < minNodeAge {
+				logger.DebugLog("Node is too new for scale-down",
+					"nodeName", nodeName,
+					"nodeAge", nodeAge.String(),
+					"minNodeAge", minNodeAge.String(),
+				)
+				return true
+			}
+			break
+		}
+	}
+
+	return false
 }

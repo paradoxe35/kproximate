@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/paradoxe35/kproximate/config"
 	"github.com/paradoxe35/kproximate/kubernetes"
 	"github.com/paradoxe35/kproximate/proxmox"
 	apiv1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
@@ -486,6 +488,103 @@ func TestAssessScaleDownIsUnacceptable(t *testing.T) {
 
 	if scaleEvent != nil {
 		t.Error("AssessScaleDown did not return nil")
+	}
+}
+
+func TestScaleDownStabilizationPrevention(t *testing.T) {
+	// Create a mock node that was created recently
+	recentNode := apiv1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "kp-node-recent",
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * time.Minute)), // 2 minutes ago
+		},
+	}
+
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{recentNode},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    4,
+				Memory: 4294967296, // 4GB
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-recent": {
+					Cpu:    1.0,
+					Memory: 1073741824.0, // 1GB
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 5,  // 5 minutes stabilization
+			MinNodeAgeMinutes:             10, // 10 minutes minimum age
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should return nil because of recent node creation
+	if scaleEvent != nil {
+		t.Error("Expected scale-down to be prevented due to recent node creation")
+	}
+}
+
+func TestScaleDownNodeTooNewPrevention(t *testing.T) {
+	// Create a mock node that is old enough for stabilization but too new for individual scale-down
+	oldEnoughForStabilization := apiv1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "kp-node-old-enough",
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-20 * time.Minute)), // 20 minutes ago
+		},
+	}
+
+	newNode := apiv1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "kp-node-new",
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-5 * time.Minute)), // 5 minutes ago
+		},
+	}
+
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{oldEnoughForStabilization, newNode},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    8,
+				Memory: 8589934592, // 8GB
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-old-enough": {
+					Cpu:    1.5,          // Higher load to make it less preferred
+					Memory: 1073741824.0, // 1GB
+				},
+				"kp-node-new": {
+					Cpu:    0.1,         // Lower load to make it more preferred for scale-down
+					Memory: 107374182.0, // 0.1GB
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 3,  // 3 minutes stabilization (passed)
+			MinNodeAgeMinutes:             10, // 10 minutes minimum age
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should return nil because the selected node (lowest load) would be too new
+	if scaleEvent != nil {
+		t.Errorf("Expected scale-down to be prevented due to selected node being too new, but got scale event for: %s", scaleEvent.NodeName)
 	}
 }
 
