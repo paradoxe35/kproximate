@@ -72,10 +72,6 @@ The value of `kpJoinCommand` is executed on the new node as follows: `bash -c <y
 
 The [create_kproximate_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_kproximate_template.sh) script creates a template that joins the Kubernetes cluster automatically on first boot.
 
-### Create generic template
-
-The [create_cloud_init_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_cloud_init_template.sh) script can be used as a guide to creating a cloud init template, Ubuntu, Alma Linux 9, Amazon Linux 2, CentOS 9, Fedora 38 etc.
-
 ### Using local storage
 
 Those wishing to use local storage can set `kpLocalTemplateStorage: true` in their configuration and create a template on each Proxmox node with an identical name but a different VMID.
@@ -90,6 +86,23 @@ If creating your own template please consider the following:
 - Ensure that each time it is booted the template will generate a new machine-id. I found that this was only achieveable when truncating (and not removing) `/etc/machine-id` with the `virt-customize --truncate` command at the end of the configuration steps.
 - It should be configured to receive a DHCP IP lease.
 - If you are using VLANs ensure it is tagged appropriately, ie the one your kubernetes cluster resides in.
+
+**Create custom template**
+
+This [create_cloud_init_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_cloud_init_template.sh) script can be used as a helper to quickly create a proxmox cloud init custom template: Ubuntu, Alma Linux 9, Amazon Linux 2, CentOS 9, Fedora 38 etc.
+
+It will create a template with the following features:
+
+- Cloud-init enabled
+- qemu-guest-agent installed
+- SSH key injection
+- Machine ID reset
+- Cloud-init disk added
+- DHCP enabled
+- Virtio drivers installed
+- Cloud-init user-data and meta-data files added
+- Cloud-init network config added
+- etc.
 
 ## Networking
 
