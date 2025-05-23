@@ -87,7 +87,7 @@ If creating your own template please consider the following:
 - It should be configured to receive a DHCP IP lease.
 - If you are using VLANs ensure it is tagged appropriately, ie the one your kubernetes cluster resides in.
 
-**Create custom template**
+**Create custom (generic) template**
 
 This [create_cloud_init_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_cloud_init_template.sh) script can be used as a helper to quickly create a proxmox cloud init custom template: Ubuntu, Alma Linux 9, Amazon Linux 2, CentOS 9, Fedora 38 etc.
 
