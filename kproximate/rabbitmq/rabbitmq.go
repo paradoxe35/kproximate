@@ -105,13 +105,7 @@ func GetPendingScaleEvents(ch *amqp.Channel, queueName string) (int, error) {
 }
 
 func GetRunningScaleEvents(client *http.Client, rabbitConfig config.RabbitConfig, queueName string) (int, error) {
-	// Use HTTPS for the management API when TLS is enabled
-	protocol := "http"
-	if rabbitConfig.UseTLS {
-		protocol = "https"
-	}
-
-	endpoint := fmt.Sprintf("%s://%s:15672/api/queues/%s/%s", protocol, rabbitConfig.Host, url.PathEscape("/"), queueName)
+	endpoint := fmt.Sprintf("http://%s:15672/api/queues/%s/%s", rabbitConfig.Host, url.PathEscape("/"), queueName)
 	logger.InfoLog("Connecting to RabbitMQ management API", "url", endpoint)
 
 	req, err := http.NewRequest("GET", endpoint, nil)
