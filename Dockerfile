@@ -8,6 +8,7 @@ RUN cd kproximate/$COMPONENT && GOOS=linux GOARCH=$TARGETARCH go build -v -o /go
 RUN upx /go/bin/$COMPONENT
 
 FROM --platform=$BUILDPLATFORM alpine
+LABEL org.opencontainers.image.source=https://github.com/paradoxe35/kproximate
 ARG COMPONENT
 RUN adduser \    
     --disabled-password \    
