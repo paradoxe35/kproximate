@@ -521,30 +521,28 @@ func (scaler *ProxmoxScaler) GetAllocatableResources() (AllocatableResources, er
 }
 
 func (scaler *ProxmoxScaler) GetAllocatedResources() (AllocatedResources, error) {
-	var allocatedResources AllocatedResources
-
 	// Add a small delay to ensure we get the most up-to-date resource allocation
 	// This helps prevent race conditions where pods have been scheduled but
 	// the resource calculation hasn't been updated yet
-	time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second) // This delay might still be relevant or could be re-evaluated
 
-	resources, err := scaler.Kubernetes.GetKpNodesAllocatedResources(scaler.config.KpNodeNameRegex)
+	clusterAllocatedK8s, err := scaler.Kubernetes.GetClusterAllocatedResources()
 	if err != nil {
-		return allocatedResources, err
+		return AllocatedResources{}, err
 	}
 
-	for _, kpNode := range resources {
-		allocatedResources.Cpu += kpNode.Cpu
-		allocatedResources.Memory += kpNode.Memory
+	// Convert kubernetes.AllocatedResources to scaler.AllocatedResources
+	scalerAllocatedResources := AllocatedResources{
+		Cpu:    clusterAllocatedK8s.Cpu,
+		Memory: clusterAllocatedK8s.Memory,
 	}
 
-	logger.DebugLog("Calculated total allocated resources",
-		"totalCpu", allocatedResources.Cpu,
-		"totalMemory", allocatedResources.Memory,
-		"nodeCount", len(resources),
+	logger.DebugLog("Calculated total cluster allocated resources",
+		"totalCpu", scalerAllocatedResources.Cpu,
+		"totalMemory", scalerAllocatedResources.Memory,
 	)
 
-	return allocatedResources, nil
+	return scalerAllocatedResources, nil
 }
 
 func (scaler *ProxmoxScaler) GetResourceStatistics() (ResourceStatistics, error) {

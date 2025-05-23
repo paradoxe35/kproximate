@@ -16,6 +16,11 @@ type KubernetesMock struct {
 	WorkerNodesAllocatableResources        WorkerNodesAllocatableResources
 	FailedSchedulingDueToControlPlaneTaint bool
 	KpNodes                                []apiv1.Node
+	MockClusterAllocatedResources          AllocatedResources // New field for mock
+}
+
+func (m *KubernetesMock) GetClusterAllocatedResources() (AllocatedResources, error) {
+	return m.MockClusterAllocatedResources, nil
 }
 
 func (m *KubernetesMock) GetUnschedulableResources(kpNodeCores int64, kpNodeNameRegex regexp.Regexp) (UnschedulableResources, error) {
