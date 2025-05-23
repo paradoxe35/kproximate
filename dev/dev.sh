@@ -43,6 +43,14 @@ LOAD_HEADROOM=0.2
 WAIT_SECONDS_FOR_JOIN=60
 WAIT_SECONDS_FOR_PROVISION=60
 
+## Scale-down stabilization period in minutes. Prevents scale-down if any node
+## was created within this period.
+SCALE_DOWN_STABILIZATION_MINUTES=5
+
+## Minimum age in minutes before a node can be considered for scale-down.
+## This prevents newly created nodes from being immediately removed.
+MIN_NODE_AGE_MINUTES=10
+
 # Node selection strategy configuration
 NODE_SELECTION_STRATEGY="spread"
 MIN_AVAILABLE_CPU_CORES=0
@@ -153,6 +161,14 @@ while [[ $# -gt 0 ]]; do
             EXCLUDED_NODES="$2"
             shift 2
             ;;
+        --scale-down-stabilization-minutes)
+            SCALE_DOWN_STABILIZATION_MINUTES="$2"
+            shift 2
+            ;;
+        --min-node-age-minutes)
+            MIN_NODE_AGE_MINUTES="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [options]"
             echo "Options:"
@@ -172,6 +188,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --min-available-cpu-cores <number>   Minimum available CPU cores required (default: 0)"
             echo "  --min-available-memory-mb <number>   Minimum available memory in MB required (default: 0)"
             echo "  --excluded-nodes <nodes>             Comma-separated list of nodes to exclude (default: \"\")"
+            echo "  --scale-down-stabilization-minutes <number> Scale-down stabilization period in minutes (default: 5)"
+            echo "  --min-node-age-minutes <number>     Minimum node age before scale-down in minutes (default: 10)"
             echo "  --help                               Show this help message"
             echo ""
             echo "Environment variables can also be set in $SCRIPT_DIR/.env.dev"
@@ -295,6 +313,10 @@ export nodeSelectionStrategy=${NODE_SELECTION_STRATEGY:-"spread"}
 export minAvailableCpuCores=${MIN_AVAILABLE_CPU_CORES:-0}
 export minAvailableMemoryMB=${MIN_AVAILABLE_MEMORY_MB:-0}
 export excludedNodes=${EXCLUDED_NODES:-""}
+
+# Scale-down stabilization configuration
+export scaleDownStabilizationMinutes=${SCALE_DOWN_STABILIZATION_MINUTES:-5}
+export minNodeAgeMinutes=${MIN_NODE_AGE_MINUTES:-10}
 
 # Change to project root directory
 cd $PROJECT_ROOT
