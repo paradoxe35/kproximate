@@ -82,7 +82,7 @@ The [create_kproximate_template.sh](https://github.com/paradoxe35/kproximate/tre
 
 To use local storage, set `kpLocalTemplateStorage: true` in your configuration and create a template on each Proxmox node, ensuring each template has the same name but a unique VMID.
 
-Set `kpLocalTemplateStorage` to `true` if your template uses local storage rather than shared storage (such as NFS, CIFS, etc.).
+Set `kpLocalTemplateStorage` to `true` if your template uses local storage instead of shared storage (such as NFS, CIFS, etc.); otherwise, an error will occur when you attempt to create a new VM.
 
 ### Custom templates
 
