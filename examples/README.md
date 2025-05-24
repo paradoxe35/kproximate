@@ -50,7 +50,6 @@ It will create a template with the following features:
 - SSH key injection
 - Machine ID reset
 - Cloud-init disk added
-- DHCP enabled
 - Virtio drivers installed
 - Cloud-init user-data and meta-data files added
 - Cloud-init network config added
