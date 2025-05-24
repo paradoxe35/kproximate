@@ -33,63 +33,15 @@ Alternatively you may use password authentication with a user that has the above
 
 ## Proxmox Template
 
-There are two types of template that may be created, each using a different method to join the cluster, qemu-exec and first boot.
+There are two types of templates that can be created, each utilizing a different method for joining the cluster: `qemu-exec` and `first boot`.
 
-Both methods require a script to be run on a host in the Proxmox cluster after configuring the the variables at the top with values appropriate for your cluster.
+Both methods require you to run a script on a host within the Proxmox cluster, after configuring the variables at the top of the script with values appropriate for your cluster.
 
-Special consideration should be given to the STORAGE variable whose value should be the name of the storage on which you wish to store the template.
-
-When running the script it requires two args. First the codename of an ubuntu release (e.g. "jammy") and then the VMID to assign to the template.
-
-Consideration should be given to the VMID as all kproximate nodes created will be assigned to the next available VMID after that of the template.
-
-Example:
-
-`./create_kproximate_template_exec.sh jammy 600`
+Additionally, consider the VMID, as all kproximate nodes created will be assigned the next available VMIDs following that of the template.
 
 ### Join by qemu-exec (recommended)
 
-The [create_kproximate_template_exec.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_kproximate_template_exec.sh) script creates a template that joins the Kubernetes cluster using a command that is executed by qemu-exec.
-
-The benefits of this are:
-
-- The template does not contain secrets
-- The template can be re-used across mutliple k3s clusters
-
-If using this method you must supply the following values:
-
-```yaml
-kproximate:
-  config:
-    kpQemuExecJoin: true
-  secrets:
-    kpJoinCommand: "<your-join-command>"
-```
-
-The value of `kpJoinCommand` is executed on the new node as follows: `bash -c <your-join-command>`.
-
-### Join on first boot
-
-The [create_kproximate_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_kproximate_template.sh) script creates a template that joins the Kubernetes cluster automatically on first boot.
-
-### Using local storage
-
-Those wishing to use local storage can set `kpLocalTemplateStorage: true` in their configuration and create a template on each Proxmox node with an identical name but a different VMID.
-
-### Custom templates
-
-If creating your own template please consider the following:
-
-- It should have `qemu-guest-agent` installed.
-- It should be a cloud-init enabled image in order for ssh key injection to work.
-- The final template should have a cloudinit disk added to it.
-- Ensure that each time it is booted the template will generate a new machine-id. I found that this was only achieveable when truncating (and not removing) `/etc/machine-id` with the `virt-customize --truncate` command at the end of the configuration steps.
-- It should be configured to receive a DHCP IP lease.
-- If you are using VLANs ensure it is tagged appropriately, ie the one your kubernetes cluster resides in.
-
-**Create custom (generic) template**
-
-This [create_cloud_init_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_cloud_init_template.sh) script can be used as a helper to quickly create a proxmox cloud init custom template: Ubuntu, Alma Linux 9, Amazon Linux 2, CentOS 9, Fedora 38 etc.
+This [create_cloud_init_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_cloud_init_template.sh) script creates a (generic) template that joins the Kubernetes cluster using a command that is executed by qemu-exec.
 
 It will create a template with the following features:
 
@@ -104,11 +56,48 @@ It will create a template with the following features:
 - Cloud-init network config added
 - etc.
 
+The benefits of this are:
+
+- The template does not contain secrets
+- The template can be reused across multiple Kubernetes clusters with any Kubernetes distribution, such as k0s, k3s, or standard Kubernetes.
+
+If using this method you must supply the following values:
+
+```yaml
+kproximate:
+  config:
+    kpQemuExecJoin: true
+    kpNodeTemplateName: "ubuntu-22.04-cloudinit-template" # If you chose Ubuntu Jammy
+  secrets:
+    kpJoinCommand: "<your-join-command>"
+```
+
+The value of `kpJoinCommand` is executed on the new node as follows: `bash -c <your-join-command>`.
+
+### Join on first boot
+
+The [create_kproximate_template.sh](https://github.com/paradoxe35/kproximate/tree/main/examples/create_kproximate_template.sh) script generates a template that automatically joins the Kubernetes (k3s) cluster upon first boot.
+
+### Using local storage
+
+To use local storage, set `kpLocalTemplateStorage: true` in your configuration and create a template on each Proxmox node, ensuring each template has the same name but a unique VMID.
+
+### Custom templates
+
+If creating your own template please consider the following:
+
+- It should have `qemu-guest-agent` installed.
+- It should be a cloud-init enabled image in order for ssh key injection to work.
+- The final template should have a cloudinit disk added to it.
+- Ensure that each time it is booted the template will generate a new machine-id. I found that this was only achieveable when truncating (and not removing) `/etc/machine-id` with the `virt-customize --truncate` command at the end of the configuration steps.
+- It should be configured to receive a DHCP IP lease.
+- If you are using VLANs ensure it is tagged appropriately, ie the one your kubernetes cluster resides in.
+
 ## Networking
 
 The template should be configured to reside in the same network as your Kubernetes cluster, this can be done after it's creation in the Proxmox web gui.
 
-This network should also provide a DHCP server so that new kproximate nodes can aquire an IP address.
+This network should also provide a DHCP server so that new kproximate nodes can acquire an IP address.
 
 Your Proxmox API endpoint should also be accessible from this network. For example, in my case I have a firewall rule between the two VLANS that my Proxmox and Kubernetes clusters are in.
 
