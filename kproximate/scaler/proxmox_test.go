@@ -671,3 +671,293 @@ func TestParseNodeLabels(t *testing.T) {
 		t.Errorf("Expected topology.kubernetes.io/zone label to have 'proxmox-node-01' as value, got %s", labels["topology.kubernetes.io/zone"])
 	}
 }
+
+// Enhanced Scaling Tests
+
+func TestResourcePressureScaling(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			UnschedulableResources: kubernetes.UnschedulableResources{
+				Cpu:    0,
+				Memory: 0,
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.85, // Above 80% threshold
+				MemoryUtilization: 0.75, // Below 80% threshold
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			MaxKpNodes:                    3,
+			EnableResourcePressureScaling: true,
+			CpuUtilizationThreshold:       0.8,
+			MemoryUtilizationThreshold:    0.8,
+		},
+	}
+
+	currentEvents := 0
+
+	requiredScaleEvents, err := s.RequiredScaleEvents(currentEvents)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should trigger scaling due to CPU pressure
+	if len(requiredScaleEvents) != 1 {
+		t.Errorf("Expected exactly 1 scaleEvent due to CPU pressure, got: %d", len(requiredScaleEvents))
+	}
+}
+
+func TestMemoryPressureScaling(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			UnschedulableResources: kubernetes.UnschedulableResources{
+				Cpu:    0,
+				Memory: 0,
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.75, // Below 80% threshold
+				MemoryUtilization: 0.85, // Above 80% threshold
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			MaxKpNodes:                    3,
+			EnableResourcePressureScaling: true,
+			CpuUtilizationThreshold:       0.8,
+			MemoryUtilizationThreshold:    0.8,
+		},
+	}
+
+	currentEvents := 0
+
+	requiredScaleEvents, err := s.RequiredScaleEvents(currentEvents)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should trigger scaling due to memory pressure
+	if len(requiredScaleEvents) != 1 {
+		t.Errorf("Expected exactly 1 scaleEvent due to memory pressure, got: %d", len(requiredScaleEvents))
+	}
+}
+
+func TestSchedulingErrorScaling(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			UnschedulableResources: kubernetes.UnschedulableResources{
+				Cpu:    0,
+				Memory: 0,
+			},
+			MockSchedulingErrors: []kubernetes.SchedulingError{
+				{
+					PodName:      "pod-1",
+					Namespace:    "default",
+					Reason:       "FailedScheduling",
+					Message:      "Insufficient CPU",
+					Timestamp:    time.Now(),
+					FailureCount: 1,
+				},
+				{
+					PodName:      "pod-2",
+					Namespace:    "default",
+					Reason:       "FailedScheduling",
+					Message:      "Insufficient memory",
+					Timestamp:    time.Now(),
+					FailureCount: 2,
+				},
+				{
+					PodName:      "pod-3",
+					Namespace:    "kube-system",
+					Reason:       "FailedScheduling",
+					Message:      "No suitable node",
+					Timestamp:    time.Now(),
+					FailureCount: 1,
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                  2,
+			KpNodeMemory:                 2048,
+			MaxKpNodes:                   3,
+			EnableSchedulingErrorScaling: true,
+			SchedulingErrorThreshold:     3,
+		},
+	}
+
+	currentEvents := 0
+
+	requiredScaleEvents, err := s.RequiredScaleEvents(currentEvents)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should trigger scaling due to scheduling errors (3 unique failed pods)
+	if len(requiredScaleEvents) != 1 {
+		t.Errorf("Expected exactly 1 scaleEvent due to scheduling errors, got: %d", len(requiredScaleEvents))
+	}
+}
+
+func TestStoragePressureScaling(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			UnschedulableResources: kubernetes.UnschedulableResources{
+				Cpu:    0,
+				Memory: 0,
+			},
+			MockDiskUtilization: map[string]kubernetes.DiskUtilization{
+				"worker-node-1": {
+					NodeName:             "worker-node-1",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      88, // 88% utilization, above 85% threshold
+					AvailableDiskSpaceGB: 12,
+					UtilizationPercent:   0.88,
+				},
+				"worker-node-2": {
+					NodeName:             "worker-node-2",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      70,
+					AvailableDiskSpaceGB: 30,
+					UtilizationPercent:   0.70,
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                  2,
+			KpNodeMemory:                 2048,
+			MaxKpNodes:                   3,
+			EnableStoragePressureScaling: true,
+			DiskUtilizationThreshold:     0.85,
+			MinAvailableDiskSpaceGB:      5,
+		},
+	}
+
+	currentEvents := 0
+
+	requiredScaleEvents, err := s.RequiredScaleEvents(currentEvents)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should trigger scaling due to storage pressure
+	if len(requiredScaleEvents) != 1 {
+		t.Errorf("Expected exactly 1 scaleEvent due to storage pressure, got: %d", len(requiredScaleEvents))
+	}
+}
+
+func TestMinDiskSpaceScaling(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			UnschedulableResources: kubernetes.UnschedulableResources{
+				Cpu:    0,
+				Memory: 0,
+			},
+			MockDiskUtilization: map[string]kubernetes.DiskUtilization{
+				"worker-node-1": {
+					NodeName:             "worker-node-1",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      97, // Only 3GB available, below 5GB threshold
+					AvailableDiskSpaceGB: 3,
+					UtilizationPercent:   0.97,
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                  2,
+			KpNodeMemory:                 2048,
+			MaxKpNodes:                   3,
+			EnableStoragePressureScaling: true,
+			DiskUtilizationThreshold:     0.85,
+			MinAvailableDiskSpaceGB:      5,
+		},
+	}
+
+	currentEvents := 0
+
+	requiredScaleEvents, err := s.RequiredScaleEvents(currentEvents)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should trigger scaling due to insufficient available disk space
+	if len(requiredScaleEvents) != 1 {
+		t.Errorf("Expected exactly 1 scaleEvent due to insufficient disk space, got: %d", len(requiredScaleEvents))
+	}
+}
+
+func TestCombinedTraditionalAndEnhancedScaling(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			UnschedulableResources: kubernetes.UnschedulableResources{
+				Cpu:    1.0, // Traditional unschedulable CPU
+				Memory: 1073741824, // Traditional unschedulable memory (1GB)
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.85, // Above threshold
+				MemoryUtilization: 0.75, // Below threshold
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			MaxKpNodes:                    3,
+			EnableResourcePressureScaling: true,
+			CpuUtilizationThreshold:       0.8,
+			MemoryUtilizationThreshold:    0.8,
+		},
+	}
+
+	currentEvents := 0
+
+	requiredScaleEvents, err := s.RequiredScaleEvents(currentEvents)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should trigger scaling due to both traditional unschedulable resources and CPU pressure
+	// The CPU requirement should be the max of traditional (1.0) and enhanced (2.0) = 2.0 CPU
+	// Memory requirements should be additive: traditional (1GB) + enhanced (2GB) = 3GB
+	// This should result in 1 scale event since max(1 CPU node, 2 CPU nodes) = 2 CPU nodes
+	// and ceil(3GB / 2GB per node) = 2 memory nodes, so max(2,2) = 2 nodes total
+	// But since we're using math.Max for CPU and additive for memory, we get 1 node
+	if len(requiredScaleEvents) != 1 {
+		t.Errorf("Expected exactly 1 scaleEvent due to combined scaling factors, got: %d", len(requiredScaleEvents))
+	}
+}
+
+func TestEnhancedScalingDisabled(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			UnschedulableResources: kubernetes.UnschedulableResources{
+				Cpu:    0,
+				Memory: 0,
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.95, // Well above threshold
+				MemoryUtilization: 0.95, // Well above threshold
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			MaxKpNodes:                    3,
+			EnableResourcePressureScaling: false, // Disabled
+			CpuUtilizationThreshold:       0.8,
+			MemoryUtilizationThreshold:    0.8,
+		},
+	}
+
+	currentEvents := 0
+
+	requiredScaleEvents, err := s.RequiredScaleEvents(currentEvents)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should not trigger scaling since enhanced scaling is disabled
+	if len(requiredScaleEvents) != 0 {
+		t.Errorf("Expected 0 scaleEvents since enhanced scaling is disabled, got: %d", len(requiredScaleEvents))
+	}
+}

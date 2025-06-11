@@ -128,6 +128,7 @@ func (scaler *ProxmoxScaler) requiredScaleEvents(requiredResources kubernetes.Un
 }
 
 func (scaler *ProxmoxScaler) RequiredScaleEvents(allScaleEvents int) ([]*ScaleEvent, error) {
+	// Check traditional unschedulable resources
 	unschedulableResources, err := scaler.Kubernetes.GetUnschedulableResources(int64(scaler.config.KpNodeCores), scaler.config.KpNodeNameRegex)
 	if err != nil {
 		logger.ErrorLog("Failed to get unschedulable resources:", "error", err)
@@ -137,7 +138,178 @@ func (scaler *ProxmoxScaler) RequiredScaleEvents(allScaleEvents int) ([]*ScaleEv
 		logger.DebugLog("Found unschedulable resources", "resources", fmt.Sprintf("%+v", unschedulableResources))
 	}
 
-	return scaler.requiredScaleEvents(unschedulableResources, allScaleEvents)
+	// Check for enhanced scaling factors
+	enhancedScaling, err := scaler.checkEnhancedScalingFactors()
+	if err != nil {
+		logger.ErrorLog("Failed to check enhanced scaling factors:", "error", err)
+	}
+
+	// Combine traditional and enhanced scaling requirements
+	combinedResources := scaler.combineScalingRequirements(unschedulableResources, enhancedScaling)
+
+	return scaler.requiredScaleEvents(combinedResources, allScaleEvents)
+}
+
+// checkEnhancedScalingFactors evaluates additional scaling triggers beyond unschedulable pods
+func (scaler *ProxmoxScaler) checkEnhancedScalingFactors() (kubernetes.UnschedulableResources, error) {
+	var enhancedResources kubernetes.UnschedulableResources
+
+	// Check resource pressure thresholds
+	if scaler.config.EnableResourcePressureScaling {
+		resourcePressure, err := scaler.checkResourcePressure()
+		if err != nil {
+			logger.WarnLog("Failed to check resource pressure", "error", err)
+		} else {
+			enhancedResources.Cpu += resourcePressure.Cpu
+			enhancedResources.Memory += resourcePressure.Memory
+		}
+	}
+
+	// Check for scheduling errors
+	if scaler.config.EnableSchedulingErrorScaling {
+		schedulingPressure, err := scaler.checkSchedulingErrors()
+		if err != nil {
+			logger.WarnLog("Failed to check scheduling errors", "error", err)
+		} else {
+			enhancedResources.Cpu += schedulingPressure.Cpu
+			enhancedResources.Memory += schedulingPressure.Memory
+		}
+	}
+
+	// Check storage pressure
+	if scaler.config.EnableStoragePressureScaling {
+		storagePressure, err := scaler.checkStoragePressure()
+		if err != nil {
+			logger.WarnLog("Failed to check storage pressure", "error", err)
+		} else {
+			enhancedResources.Cpu += storagePressure.Cpu
+			enhancedResources.Memory += storagePressure.Memory
+		}
+	}
+
+	return enhancedResources, nil
+}
+
+// combineScalingRequirements merges traditional and enhanced scaling requirements
+func (scaler *ProxmoxScaler) combineScalingRequirements(traditional, enhanced kubernetes.UnschedulableResources) kubernetes.UnschedulableResources {
+	return kubernetes.UnschedulableResources{
+		Cpu:    math.Max(traditional.Cpu, enhanced.Cpu),
+		Memory: traditional.Memory + enhanced.Memory, // Memory requirements are additive
+	}
+}
+
+// checkResourcePressure evaluates CPU and memory utilization thresholds
+func (scaler *ProxmoxScaler) checkResourcePressure() (kubernetes.UnschedulableResources, error) {
+	var pressureResources kubernetes.UnschedulableResources
+
+	utilization, err := scaler.Kubernetes.GetClusterResourceUtilization()
+	if err != nil {
+		return pressureResources, fmt.Errorf("failed to get cluster resource utilization: %w", err)
+	}
+
+	logger.DebugLog("Current cluster resource utilization",
+		"cpuUtilization", utilization.CpuUtilization,
+		"memoryUtilization", utilization.MemoryUtilization)
+
+	// Check CPU pressure
+	if utilization.CpuUtilization > scaler.config.CpuUtilizationThreshold {
+		// Request additional CPU capacity equivalent to one node
+		pressureResources.Cpu = float64(scaler.config.KpNodeCores)
+		logger.InfoLog("CPU utilization threshold exceeded, triggering scale-up",
+			"currentUtilization", utilization.CpuUtilization,
+			"threshold", scaler.config.CpuUtilizationThreshold)
+	}
+
+	// Check memory pressure
+	if utilization.MemoryUtilization > scaler.config.MemoryUtilizationThreshold {
+		// Request additional memory capacity equivalent to one node
+		pressureResources.Memory = int64(scaler.config.KpNodeMemory << 20) // Convert MB to bytes
+		logger.InfoLog("Memory utilization threshold exceeded, triggering scale-up",
+			"currentUtilization", utilization.MemoryUtilization,
+			"threshold", scaler.config.MemoryUtilizationThreshold)
+	}
+
+	return pressureResources, nil
+}
+
+// checkSchedulingErrors evaluates recent pod scheduling failures
+func (scaler *ProxmoxScaler) checkSchedulingErrors() (kubernetes.UnschedulableResources, error) {
+	var errorResources kubernetes.UnschedulableResources
+
+	// Look for scheduling errors in the last 5 minutes
+	timeWindow := 5 * time.Minute
+	schedulingErrors, err := scaler.Kubernetes.GetRecentSchedulingErrors(timeWindow)
+	if err != nil {
+		return errorResources, fmt.Errorf("failed to get recent scheduling errors: %w", err)
+	}
+
+	// Count unique pods with scheduling errors
+	uniqueFailedPods := make(map[string]bool)
+	totalFailures := 0
+	for _, error := range schedulingErrors {
+		podKey := fmt.Sprintf("%s/%s", error.Namespace, error.PodName)
+		uniqueFailedPods[podKey] = true
+		totalFailures += error.FailureCount
+	}
+
+	logger.DebugLog("Scheduling error analysis",
+		"uniqueFailedPods", len(uniqueFailedPods),
+		"totalFailures", totalFailures,
+		"threshold", scaler.config.SchedulingErrorThreshold)
+
+	// Trigger scaling if we have enough scheduling errors
+	if len(uniqueFailedPods) >= scaler.config.SchedulingErrorThreshold {
+		// Request capacity for one additional node
+		errorResources.Cpu = float64(scaler.config.KpNodeCores)
+		errorResources.Memory = int64(scaler.config.KpNodeMemory << 20)
+		logger.InfoLog("Scheduling error threshold exceeded, triggering scale-up",
+			"failedPods", len(uniqueFailedPods),
+			"threshold", scaler.config.SchedulingErrorThreshold)
+	}
+
+	return errorResources, nil
+}
+
+// checkStoragePressure evaluates disk space utilization across nodes
+func (scaler *ProxmoxScaler) checkStoragePressure() (kubernetes.UnschedulableResources, error) {
+	var storageResources kubernetes.UnschedulableResources
+
+	diskUtilization, err := scaler.Kubernetes.GetNodeDiskUtilization()
+	if err != nil {
+		return storageResources, fmt.Errorf("failed to get node disk utilization: %w", err)
+	}
+
+	// Check if any node exceeds storage thresholds
+	for nodeName, disk := range diskUtilization {
+		logger.DebugLog("Node disk utilization",
+			"node", nodeName,
+			"utilizationPercent", disk.UtilizationPercent,
+			"availableGB", disk.AvailableDiskSpaceGB)
+
+		// Check disk utilization percentage threshold
+		if disk.UtilizationPercent > scaler.config.DiskUtilizationThreshold {
+			storageResources.Cpu = float64(scaler.config.KpNodeCores)
+			storageResources.Memory = int64(scaler.config.KpNodeMemory << 20)
+			logger.InfoLog("Disk utilization threshold exceeded, triggering scale-up",
+				"node", nodeName,
+				"currentUtilization", disk.UtilizationPercent,
+				"threshold", scaler.config.DiskUtilizationThreshold)
+			break
+		}
+
+		// Check minimum available disk space threshold
+		if disk.AvailableDiskSpaceGB < float64(scaler.config.MinAvailableDiskSpaceGB) {
+			storageResources.Cpu = float64(scaler.config.KpNodeCores)
+			storageResources.Memory = int64(scaler.config.KpNodeMemory << 20)
+			logger.InfoLog("Minimum disk space threshold exceeded, triggering scale-up",
+				"node", nodeName,
+				"availableGB", disk.AvailableDiskSpaceGB,
+				"minimumGB", scaler.config.MinAvailableDiskSpaceGB)
+			break
+		}
+	}
+
+	return storageResources, nil
 }
 
 // func selectTargetHost(hosts []proxmox.HostInformation, kpNodes []proxmox.VmInformation, scaleEvents []*ScaleEvent) proxmox.HostInformation {

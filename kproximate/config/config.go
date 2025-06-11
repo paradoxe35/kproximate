@@ -42,6 +42,20 @@ type KproximateConfig struct {
 	MinAvailableCpuCores  int    `env:"minAvailableCpuCores,default=0"`
 	MinAvailableMemoryMB  int    `env:"minAvailableMemoryMB,default=0"`
 	ExcludedNodes         string `env:"excludedNodes"`
+
+	// Resource Pressure Thresholds Configuration
+	CpuUtilizationThreshold       float64 `env:"cpuUtilizationThreshold,default=0.8"`    // 80% CPU utilization threshold
+	MemoryUtilizationThreshold    float64 `env:"memoryUtilizationThreshold,default=0.8"` // 80% memory utilization threshold
+	EnableResourcePressureScaling bool    `env:"enableResourcePressureScaling,default=true"`
+
+	// Pod Scheduling Error Events Configuration
+	EnableSchedulingErrorScaling bool `env:"enableSchedulingErrorScaling,default=true"`
+	SchedulingErrorThreshold     int  `env:"schedulingErrorThreshold,default=3"` // Number of scheduling errors to trigger scaling
+
+	// Storage Pressure Configuration
+	DiskUtilizationThreshold     float64 `env:"diskUtilizationThreshold,default=0.85"` // 85% disk utilization threshold
+	MinAvailableDiskSpaceGB      int     `env:"minAvailableDiskSpaceGB,default=5"`     // Minimum 5GB available disk space
+	EnableStoragePressureScaling bool    `env:"enableStoragePressureScaling,default=true"`
 }
 
 type RabbitConfig struct {
@@ -124,6 +138,29 @@ func validateConfig(config *KproximateConfig) KproximateConfig {
 
 	if config.MinAvailableMemoryMB < 0 {
 		config.MinAvailableMemoryMB = 0
+	}
+
+	// Validate resource pressure thresholds (0.0 to 1.0)
+	if config.CpuUtilizationThreshold < 0.0 || config.CpuUtilizationThreshold > 1.0 {
+		config.CpuUtilizationThreshold = 0.8
+	}
+
+	if config.MemoryUtilizationThreshold < 0.0 || config.MemoryUtilizationThreshold > 1.0 {
+		config.MemoryUtilizationThreshold = 0.8
+	}
+
+	if config.DiskUtilizationThreshold < 0.0 || config.DiskUtilizationThreshold > 1.0 {
+		config.DiskUtilizationThreshold = 0.85
+	}
+
+	// Validate scheduling error threshold
+	if config.SchedulingErrorThreshold < 1 {
+		config.SchedulingErrorThreshold = 3
+	}
+
+	// Validate minimum disk space
+	if config.MinAvailableDiskSpaceGB < 0 {
+		config.MinAvailableDiskSpaceGB = 5
 	}
 
 	return *config
