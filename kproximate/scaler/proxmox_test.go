@@ -891,7 +891,7 @@ func TestCombinedTraditionalAndEnhancedScaling(t *testing.T) {
 	s := ProxmoxScaler{
 		Kubernetes: &kubernetes.KubernetesMock{
 			UnschedulableResources: kubernetes.UnschedulableResources{
-				Cpu:    1.0, // Traditional unschedulable CPU
+				Cpu:    1.0,        // Traditional unschedulable CPU
 				Memory: 1073741824, // Traditional unschedulable memory (1GB)
 			},
 			MockResourceUtilization: kubernetes.ResourceUtilization{
@@ -959,5 +959,295 @@ func TestEnhancedScalingDisabled(t *testing.T) {
 	// Should not trigger scaling since enhanced scaling is disabled
 	if len(requiredScaleEvents) != 0 {
 		t.Errorf("Expected 0 scaleEvents since enhanced scaling is disabled, got: %d", len(requiredScaleEvents))
+	}
+}
+
+// Enhanced Scale-Down Tests
+
+func TestScaleDownPreventedByResourcePressure(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "kp-node-old",
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-30 * time.Minute)), // Old enough
+					},
+				},
+			},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    8,
+				Memory: 8589934592, // 8GB
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-old": {
+					Cpu:    2.0,          // Low load normally allowing scale-down
+					Memory: 1073741824.0, // 1GB
+				},
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.75, // High utilization preventing scale-down
+				MemoryUtilization: 0.60, // Normal memory utilization
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 5,
+			MinNodeAgeMinutes:             10,
+			EnableResourcePressureScaling: true,
+			CpuUtilizationThreshold:       0.8, // Scale-down threshold would be 0.7
+			MemoryUtilizationThreshold:    0.8,
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should prevent scale-down due to high CPU utilization
+	if scaleEvent != nil {
+		t.Error("Expected scale-down to be prevented due to high CPU utilization")
+	}
+}
+
+func TestScaleDownPreventedBySchedulingErrors(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "kp-node-old",
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-30 * time.Minute)),
+					},
+				},
+			},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    8,
+				Memory: 8589934592,
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-old": {
+					Cpu:    1.0,
+					Memory: 1073741824.0,
+				},
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.60, // Low utilization
+				MemoryUtilization: 0.60, // Low utilization
+			},
+			MockSchedulingErrors: []kubernetes.SchedulingError{
+				{
+					PodName:      "failed-pod-1",
+					Namespace:    "default",
+					Reason:       "FailedScheduling",
+					Message:      "Insufficient resources",
+					Timestamp:    time.Now(),
+					FailureCount: 1,
+				},
+				{
+					PodName:      "failed-pod-2",
+					Namespace:    "default",
+					Reason:       "FailedScheduling",
+					Message:      "Insufficient resources",
+					Timestamp:    time.Now(),
+					FailureCount: 1,
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 5,
+			MinNodeAgeMinutes:             10,
+			EnableSchedulingErrorScaling:  true,
+			SchedulingErrorThreshold:      4, // Scale-down threshold would be 2
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should prevent scale-down due to recent scheduling errors
+	if scaleEvent != nil {
+		t.Error("Expected scale-down to be prevented due to recent scheduling errors")
+	}
+}
+
+func TestScaleDownPreventedByStoragePressure(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "kp-node-old",
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-30 * time.Minute)),
+					},
+				},
+			},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    8,
+				Memory: 8589934592,
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-old": {
+					Cpu:    1.0,
+					Memory: 1073741824.0,
+				},
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.60,
+				MemoryUtilization: 0.60,
+			},
+			MockDiskUtilization: map[string]kubernetes.DiskUtilization{
+				"worker-node-1": {
+					NodeName:             "worker-node-1",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      82, // 82% utilization, above scale-down threshold (80%)
+					AvailableDiskSpaceGB: 18,
+					UtilizationPercent:   0.82,
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 5,
+			MinNodeAgeMinutes:             10,
+			EnableStoragePressureScaling:  true,
+			DiskUtilizationThreshold:      0.85, // Scale-down threshold would be 0.80
+			MinAvailableDiskSpaceGB:       5,    // Scale-down threshold would be 7GB
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should prevent scale-down due to high disk utilization
+	if scaleEvent != nil {
+		t.Error("Expected scale-down to be prevented due to high disk utilization")
+	}
+}
+
+func TestScaleDownAllowedWhenEnhancedFactorsNormal(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "kp-node-old",
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-30 * time.Minute)),
+					},
+				},
+			},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    8,
+				Memory: 8589934592,
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-old": {
+					Cpu:    1.0,          // Low load allowing scale-down
+					Memory: 1073741824.0, // 1GB
+				},
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.50, // Low utilization
+				MemoryUtilization: 0.50, // Low utilization
+			},
+			MockSchedulingErrors: []kubernetes.SchedulingError{}, // No scheduling errors
+			MockDiskUtilization: map[string]kubernetes.DiskUtilization{
+				"worker-node-1": {
+					NodeName:             "worker-node-1",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      60, // 60% utilization, well below thresholds
+					AvailableDiskSpaceGB: 40,
+					UtilizationPercent:   0.60,
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 5,
+			MinNodeAgeMinutes:             10,
+			EnableResourcePressureScaling: true,
+			EnableSchedulingErrorScaling:  true,
+			EnableStoragePressureScaling:  true,
+			CpuUtilizationThreshold:       0.8,
+			MemoryUtilizationThreshold:    0.8,
+			SchedulingErrorThreshold:      3,
+			DiskUtilizationThreshold:      0.85,
+			MinAvailableDiskSpaceGB:       5,
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should allow scale-down since all enhanced factors are normal
+	if scaleEvent == nil {
+		t.Error("Expected scale-down to be allowed when enhanced factors are normal")
+	} else if scaleEvent.NodeName != "kp-node-old" {
+		t.Errorf("Expected scale-down target to be 'kp-node-old', got: %s", scaleEvent.NodeName)
+	}
+}
+
+func TestScaleDownWithEnhancedFactorsDisabled(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "kp-node-old",
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-30 * time.Minute)),
+					},
+				},
+			},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    8,
+				Memory: 8589934592,
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-old": {
+					Cpu:    1.0,
+					Memory: 1073741824.0,
+				},
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.90, // High utilization that would prevent scale-down
+				MemoryUtilization: 0.90, // High utilization that would prevent scale-down
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 5,
+			MinNodeAgeMinutes:             10,
+			EnableResourcePressureScaling: false, // Disabled
+			EnableSchedulingErrorScaling:  false, // Disabled
+			EnableStoragePressureScaling:  false, // Disabled
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should allow scale-down since enhanced factors are disabled
+	if scaleEvent == nil {
+		t.Error("Expected scale-down to be allowed when enhanced factors are disabled")
 	}
 }

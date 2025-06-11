@@ -521,6 +521,12 @@ func (scaler *ProxmoxScaler) AssessScaleDown() (*ScaleEvent, error) {
 		return nil, nil
 	}
 
+	// Check enhanced scaling factors to prevent scale-down during pressure
+	if scaler.shouldPreventScaleDownDueToEnhancedFactors() {
+		logger.DebugLog("Scale-down prevented due to enhanced scaling factors indicating pressure")
+		return nil, nil
+	}
+
 	totalAllocatedResources, err := scaler.GetAllocatedResources()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get allocated resources: %w", err)
@@ -557,6 +563,12 @@ func (scaler *ProxmoxScaler) AssessScaleDown() (*ScaleEvent, error) {
 	// Additional check: ensure the selected node is not too new
 	if scaler.isNodeTooNew(scaleEvent.NodeName) {
 		logger.DebugLog("Scale-down prevented: selected node is too new", "nodeName", scaleEvent.NodeName)
+		return nil, nil
+	}
+
+	// Final check: ensure removing this specific node won't cause enhanced scaling pressure
+	if scaler.wouldScaleDownCauseEnhancedPressure(scaleEvent.NodeName) {
+		logger.DebugLog("Scale-down prevented: removing node would cause enhanced scaling pressure", "nodeName", scaleEvent.NodeName)
 		return nil, nil
 	}
 
@@ -750,6 +762,182 @@ func (scaler *ProxmoxScaler) isNodeTooNew(nodeName string) bool {
 				return true
 			}
 			break
+		}
+	}
+
+	return false
+}
+
+// shouldPreventScaleDownDueToEnhancedFactors checks if enhanced scaling factors indicate pressure
+// that would prevent safe scale-down
+func (scaler *ProxmoxScaler) shouldPreventScaleDownDueToEnhancedFactors() bool {
+	// Check resource pressure thresholds with scale-down safety margins
+	if scaler.config.EnableResourcePressureScaling {
+		if scaler.isResourcePressurePreventingScaleDown() {
+			return true
+		}
+	}
+
+	// Check for recent scheduling errors
+	if scaler.config.EnableSchedulingErrorScaling {
+		if scaler.areSchedulingErrorsPreventingScaleDown() {
+			return true
+		}
+	}
+
+	// Check storage pressure
+	if scaler.config.EnableStoragePressureScaling {
+		if scaler.isStoragePressurePreventingScaleDown() {
+			return true
+		}
+	}
+
+	return false
+}
+
+// wouldScaleDownCauseEnhancedPressure checks if removing a specific node would cause
+// enhanced scaling factors to trigger, indicating the scale-down should be prevented
+func (scaler *ProxmoxScaler) wouldScaleDownCauseEnhancedPressure(nodeName string) bool {
+	// For now, we rely on the general enhanced factors check
+	// In the future, this could simulate removing the specific node and check
+	// if that would cause resource pressure to exceed thresholds
+
+	// This is a placeholder for more sophisticated logic that could:
+	// 1. Calculate what resource utilization would be after removing this node
+	// 2. Check if that would exceed our thresholds
+	// 3. Verify that remaining nodes can handle the workload
+
+	logger.DebugLog("Enhanced pressure check for specific node scale-down", "nodeName", nodeName)
+	return false // For now, allow the general checks to handle this
+}
+
+// isResourcePressurePreventingScaleDown checks if current resource utilization is too high
+// to safely scale down. Uses more conservative thresholds than scale-up to provide safety margin.
+func (scaler *ProxmoxScaler) isResourcePressurePreventingScaleDown() bool {
+	utilization, err := scaler.Kubernetes.GetClusterResourceUtilization()
+	if err != nil {
+		logger.WarnLog("Failed to get cluster resource utilization for scale-down check", "error", err)
+		return true // Err on the side of caution
+	}
+
+	// Use more conservative thresholds for scale-down prevention (10% lower than scale-up thresholds)
+	cpuScaleDownThreshold := scaler.config.CpuUtilizationThreshold - 0.1
+	memoryScaleDownThreshold := scaler.config.MemoryUtilizationThreshold - 0.1
+
+	// Ensure thresholds don't go below reasonable minimums
+	if cpuScaleDownThreshold < 0.5 {
+		cpuScaleDownThreshold = 0.5
+	}
+	if memoryScaleDownThreshold < 0.5 {
+		memoryScaleDownThreshold = 0.5
+	}
+
+	logger.DebugLog("Resource pressure scale-down check",
+		"cpuUtilization", utilization.CpuUtilization,
+		"memoryUtilization", utilization.MemoryUtilization,
+		"cpuScaleDownThreshold", cpuScaleDownThreshold,
+		"memoryScaleDownThreshold", memoryScaleDownThreshold)
+
+	// Prevent scale-down if either CPU or memory utilization is too high
+	if utilization.CpuUtilization > cpuScaleDownThreshold {
+		logger.InfoLog("Scale-down prevented due to high CPU utilization",
+			"currentUtilization", utilization.CpuUtilization,
+			"scaleDownThreshold", cpuScaleDownThreshold)
+		return true
+	}
+
+	if utilization.MemoryUtilization > memoryScaleDownThreshold {
+		logger.InfoLog("Scale-down prevented due to high memory utilization",
+			"currentUtilization", utilization.MemoryUtilization,
+			"scaleDownThreshold", memoryScaleDownThreshold)
+		return true
+	}
+
+	return false
+}
+
+// areSchedulingErrorsPreventingScaleDown checks if there are recent scheduling errors
+// that indicate the cluster is under pressure and shouldn't be scaled down
+func (scaler *ProxmoxScaler) areSchedulingErrorsPreventingScaleDown() bool {
+	// Look for scheduling errors in the last 10 minutes (longer window for scale-down)
+	timeWindow := 10 * time.Minute
+	schedulingErrors, err := scaler.Kubernetes.GetRecentSchedulingErrors(timeWindow)
+	if err != nil {
+		logger.WarnLog("Failed to get recent scheduling errors for scale-down check", "error", err)
+		return true // Err on the side of caution
+	}
+
+	// Count unique pods with scheduling errors
+	uniqueFailedPods := make(map[string]bool)
+	for _, error := range schedulingErrors {
+		podKey := fmt.Sprintf("%s/%s", error.Namespace, error.PodName)
+		uniqueFailedPods[podKey] = true
+	}
+
+	// Use a lower threshold for scale-down prevention (half of scale-up threshold)
+	scaleDownErrorThreshold := scaler.config.SchedulingErrorThreshold / 2
+	if scaleDownErrorThreshold < 1 {
+		scaleDownErrorThreshold = 1
+	}
+
+	logger.DebugLog("Scheduling error scale-down check",
+		"uniqueFailedPods", len(uniqueFailedPods),
+		"scaleDownErrorThreshold", scaleDownErrorThreshold,
+		"timeWindow", timeWindow.String())
+
+	if len(uniqueFailedPods) >= scaleDownErrorThreshold {
+		logger.InfoLog("Scale-down prevented due to recent scheduling errors",
+			"failedPods", len(uniqueFailedPods),
+			"scaleDownThreshold", scaleDownErrorThreshold)
+		return true
+	}
+
+	return false
+}
+
+// isStoragePressurePreventingScaleDown checks if any nodes have storage pressure
+// that would make scale-down unsafe
+func (scaler *ProxmoxScaler) isStoragePressurePreventingScaleDown() bool {
+	diskUtilization, err := scaler.Kubernetes.GetNodeDiskUtilization()
+	if err != nil {
+		logger.WarnLog("Failed to get node disk utilization for scale-down check", "error", err)
+		return true // Err on the side of caution
+	}
+
+	// Use more conservative thresholds for scale-down prevention (5% lower than scale-up thresholds)
+	diskScaleDownThreshold := scaler.config.DiskUtilizationThreshold - 0.05
+	minDiskScaleDownGB := float64(scaler.config.MinAvailableDiskSpaceGB) + 2.0 // 2GB extra buffer
+
+	// Ensure thresholds don't go below reasonable minimums
+	if diskScaleDownThreshold < 0.7 {
+		diskScaleDownThreshold = 0.7
+	}
+
+	// Check if any node exceeds storage thresholds
+	for nodeName, disk := range diskUtilization {
+		logger.DebugLog("Node disk utilization scale-down check",
+			"node", nodeName,
+			"utilizationPercent", disk.UtilizationPercent,
+			"availableGB", disk.AvailableDiskSpaceGB,
+			"scaleDownThreshold", diskScaleDownThreshold,
+			"minDiskScaleDownGB", minDiskScaleDownGB)
+
+		// Check disk utilization percentage threshold
+		if disk.UtilizationPercent > diskScaleDownThreshold {
+			logger.InfoLog("Scale-down prevented due to high disk utilization",
+				"node", nodeName,
+				"currentUtilization", disk.UtilizationPercent,
+				"scaleDownThreshold", diskScaleDownThreshold)
+			return true
+		}
+
+		// Check minimum available disk space threshold
+		if disk.AvailableDiskSpaceGB < minDiskScaleDownGB {
+			logger.InfoLog("Scale-down prevented due to low available disk space",
+				"node", nodeName,
+				"availableGB", disk.AvailableDiskSpaceGB,
+				"minRequiredGB", minDiskScaleDownGB)
+			return true
 		}
 	}
 
