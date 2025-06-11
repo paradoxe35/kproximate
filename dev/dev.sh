@@ -28,14 +28,16 @@ print_error() {
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." &> /dev/null && pwd )"
 
-# Default configuration values
+# Default configuration values (these can be overridden by .env.dev)
+# RabbitMQ defaults
 RABBITMQ_CONTAINER_NAME="kproximate-rabbitmq"
 RABBITMQ_USER="guest"
 RABBITMQ_PASSWORD="guest"
 RABBITMQ_PORT=5672
 RABBITMQ_MANAGEMENT_PORT=15672
+RABBITMQ_USE_TLS=false
 
-# Default kproximate configuration
+# Application defaults
 DEBUG=true
 POLL_INTERVAL=10
 MAX_KP_NODES=5
@@ -43,19 +45,35 @@ LOAD_HEADROOM=0.2
 WAIT_SECONDS_FOR_JOIN=60
 WAIT_SECONDS_FOR_PROVISION=60
 
-## Scale-down stabilization period in minutes. Prevents scale-down if any node
-## was created within this period.
+# Scale-down stabilization defaults
 SCALE_DOWN_STABILIZATION_MINUTES=5
-
-## Minimum age in minutes before a node can be considered for scale-down.
-## This prevents newly created nodes from being immediately removed.
 MIN_NODE_AGE_MINUTES=10
 
-# Node selection strategy configuration
+# Node selection strategy defaults
 NODE_SELECTION_STRATEGY="spread"
 MIN_AVAILABLE_CPU_CORES=0
 MIN_AVAILABLE_MEMORY_MB=0
 EXCLUDED_NODES=""
+
+# Proxmox defaults
+PM_ALLOW_INSECURE=true
+PM_DEBUG=false
+KP_NODE_NAME_PREFIX="kp"
+KP_NODE_CORES=2
+KP_NODE_MEMORY=2048
+KP_NODE_DISABLE_SSH=false
+KP_QEMU_EXEC_JOIN=true
+KP_LOCAL_TEMPLATE_STORAGE=true
+
+# Enhanced Autoscaling defaults
+ENABLE_RESOURCE_PRESSURE_SCALING=true
+CPU_UTILIZATION_THRESHOLD=0.8
+MEMORY_UTILIZATION_THRESHOLD=0.8
+ENABLE_SCHEDULING_ERROR_SCALING=true
+SCHEDULING_ERROR_THRESHOLD=3
+ENABLE_STORAGE_PRESSURE_SCALING=true
+DISK_UTILIZATION_THRESHOLD=0.85
+MIN_AVAILABLE_DISK_SPACE_GB=5
 
 # Load environment variables from .env.dev if it exists
 ENV_FILE="$SCRIPT_DIR/.env.dev"
@@ -169,6 +187,38 @@ while [[ $# -gt 0 ]]; do
             MIN_NODE_AGE_MINUTES="$2"
             shift 2
             ;;
+        --enable-resource-pressure-scaling)
+            ENABLE_RESOURCE_PRESSURE_SCALING="$2"
+            shift 2
+            ;;
+        --cpu-utilization-threshold)
+            CPU_UTILIZATION_THRESHOLD="$2"
+            shift 2
+            ;;
+        --memory-utilization-threshold)
+            MEMORY_UTILIZATION_THRESHOLD="$2"
+            shift 2
+            ;;
+        --enable-scheduling-error-scaling)
+            ENABLE_SCHEDULING_ERROR_SCALING="$2"
+            shift 2
+            ;;
+        --scheduling-error-threshold)
+            SCHEDULING_ERROR_THRESHOLD="$2"
+            shift 2
+            ;;
+        --enable-storage-pressure-scaling)
+            ENABLE_STORAGE_PRESSURE_SCALING="$2"
+            shift 2
+            ;;
+        --disk-utilization-threshold)
+            DISK_UTILIZATION_THRESHOLD="$2"
+            shift 2
+            ;;
+        --min-available-disk-space-gb)
+            MIN_AVAILABLE_DISK_SPACE_GB="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [options]"
             echo "Options:"
@@ -190,6 +240,17 @@ while [[ $# -gt 0 ]]; do
             echo "  --excluded-nodes <nodes>             Comma-separated list of nodes to exclude (default: \"\")"
             echo "  --scale-down-stabilization-minutes <number> Scale-down stabilization period in minutes (default: 5)"
             echo "  --min-node-age-minutes <number>     Minimum node age before scale-down in minutes (default: 10)"
+            echo ""
+            echo "Enhanced Autoscaling Options:"
+            echo "  --enable-resource-pressure-scaling <true|false>  Enable CPU/memory pressure scaling (default: true)"
+            echo "  --cpu-utilization-threshold <0.0-1.0>           CPU utilization threshold (default: 0.8)"
+            echo "  --memory-utilization-threshold <0.0-1.0>        Memory utilization threshold (default: 0.8)"
+            echo "  --enable-scheduling-error-scaling <true|false>  Enable scheduling error scaling (default: true)"
+            echo "  --scheduling-error-threshold <number>           Number of failed pods threshold (default: 3)"
+            echo "  --enable-storage-pressure-scaling <true|false>  Enable storage pressure scaling (default: true)"
+            echo "  --disk-utilization-threshold <0.0-1.0>          Disk utilization threshold (default: 0.85)"
+            echo "  --min-available-disk-space-gb <number>          Minimum available disk space in GB (default: 5)"
+            echo ""
             echo "  --help                               Show this help message"
             echo ""
             echo "Environment variables can also be set in $SCRIPT_DIR/.env.dev"
@@ -317,6 +378,16 @@ export excludedNodes=${EXCLUDED_NODES:-""}
 # Scale-down stabilization configuration
 export scaleDownStabilizationMinutes=${SCALE_DOWN_STABILIZATION_MINUTES:-5}
 export minNodeAgeMinutes=${MIN_NODE_AGE_MINUTES:-10}
+
+# Enhanced Autoscaling configuration
+export enableResourcePressureScaling=${ENABLE_RESOURCE_PRESSURE_SCALING:-true}
+export cpuUtilizationThreshold=${CPU_UTILIZATION_THRESHOLD:-0.8}
+export memoryUtilizationThreshold=${MEMORY_UTILIZATION_THRESHOLD:-0.8}
+export enableSchedulingErrorScaling=${ENABLE_SCHEDULING_ERROR_SCALING:-true}
+export schedulingErrorThreshold=${SCHEDULING_ERROR_THRESHOLD:-3}
+export enableStoragePressureScaling=${ENABLE_STORAGE_PRESSURE_SCALING:-true}
+export diskUtilizationThreshold=${DISK_UTILIZATION_THRESHOLD:-0.85}
+export minAvailableDiskSpaceGB=${MIN_AVAILABLE_DISK_SPACE_GB:-5}
 
 # Change to project root directory
 cd $PROJECT_ROOT
