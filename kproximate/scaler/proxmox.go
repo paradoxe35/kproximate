@@ -798,17 +798,186 @@ func (scaler *ProxmoxScaler) shouldPreventScaleDownDueToEnhancedFactors() bool {
 // wouldScaleDownCauseEnhancedPressure checks if removing a specific node would cause
 // enhanced scaling factors to trigger, indicating the scale-down should be prevented
 func (scaler *ProxmoxScaler) wouldScaleDownCauseEnhancedPressure(nodeName string) bool {
-	// For now, we rely on the general enhanced factors check
-	// In the future, this could simulate removing the specific node and check
-	// if that would cause resource pressure to exceed thresholds
+	logger.DebugLog("Checking if removing specific node would cause enhanced pressure", "nodeName", nodeName)
 
-	// This is a placeholder for more sophisticated logic that could:
-	// 1. Calculate what resource utilization would be after removing this node
-	// 2. Check if that would exceed our thresholds
-	// 3. Verify that remaining nodes can handle the workload
+	// Check if removing this node would cause resource pressure
+	if scaler.config.EnableResourcePressureScaling {
+		if scaler.wouldNodeRemovalCauseResourcePressure(nodeName) {
+			return true
+		}
+	}
 
-	logger.DebugLog("Enhanced pressure check for specific node scale-down", "nodeName", nodeName)
-	return false // For now, allow the general checks to handle this
+	// Check if removing this node would cause storage pressure on remaining nodes
+	if scaler.config.EnableStoragePressureScaling {
+		if scaler.wouldNodeRemovalCauseStoragePressure(nodeName) {
+			return true
+		}
+	}
+
+	// Note: We don't check scheduling errors here because they are cluster-wide
+	// and not specific to removing a particular node
+
+	return false
+}
+
+// wouldNodeRemovalCauseResourcePressure simulates removing a specific node and checks
+// if that would cause CPU/memory utilization to exceed scale-up thresholds
+func (scaler *ProxmoxScaler) wouldNodeRemovalCauseResourcePressure(nodeName string) bool {
+	// Get current cluster resource utilization
+	currentUtilization, err := scaler.Kubernetes.GetClusterResourceUtilization()
+	if err != nil {
+		logger.WarnLog("Failed to get current resource utilization for node removal simulation", "error", err)
+		return true // Err on the side of caution
+	}
+
+	// Get current allocatable resources
+	workerNodesAllocatable, err := scaler.Kubernetes.GetWorkerNodesAllocatableResources()
+	if err != nil {
+		logger.WarnLog("Failed to get worker nodes allocatable resources for node removal simulation", "error", err)
+		return true // Err on the side of caution
+	}
+
+	// Get current allocated resources
+	totalAllocated, err := scaler.GetAllocatedResources()
+	if err != nil {
+		logger.WarnLog("Failed to get allocated resources for node removal simulation", "error", err)
+		return true // Err on the side of caution
+	}
+
+	// Calculate what allocatable resources would be after removing the node
+	nodeCapacityCpu := float64(scaler.config.KpNodeCores)
+	nodeCapacityMemory := float64(scaler.config.KpNodeMemory << 20) // Convert MB to bytes
+
+	// Simulate removing the node's capacity
+	remainingCpuAllocatable := float64(workerNodesAllocatable.Cpu) - nodeCapacityCpu
+	remainingMemoryAllocatable := float64(workerNodesAllocatable.Memory) - nodeCapacityMemory
+
+	// Ensure we don't go negative (shouldn't happen in practice)
+	if remainingCpuAllocatable <= 0 || remainingMemoryAllocatable <= 0 {
+		logger.WarnLog("Node removal would result in negative allocatable resources",
+			"nodeName", nodeName,
+			"remainingCpuAllocatable", remainingCpuAllocatable,
+			"remainingMemoryAllocatable", remainingMemoryAllocatable)
+		return true
+	}
+
+	// Calculate what utilization would be after removing the node
+	projectedCpuUtilization := totalAllocated.Cpu / remainingCpuAllocatable
+	projectedMemoryUtilization := totalAllocated.Memory / remainingMemoryAllocatable
+
+	logger.DebugLog("Node removal resource pressure simulation",
+		"nodeName", nodeName,
+		"currentCpuUtilization", currentUtilization.CpuUtilization,
+		"currentMemoryUtilization", currentUtilization.MemoryUtilization,
+		"projectedCpuUtilization", projectedCpuUtilization,
+		"projectedMemoryUtilization", projectedMemoryUtilization,
+		"cpuThreshold", scaler.config.CpuUtilizationThreshold,
+		"memoryThreshold", scaler.config.MemoryUtilizationThreshold)
+
+	// Check if projected utilization would exceed scale-up thresholds
+	if projectedCpuUtilization > scaler.config.CpuUtilizationThreshold {
+		logger.InfoLog("Node removal would cause CPU pressure exceeding scale-up threshold",
+			"nodeName", nodeName,
+			"projectedCpuUtilization", projectedCpuUtilization,
+			"threshold", scaler.config.CpuUtilizationThreshold)
+		return true
+	}
+
+	if projectedMemoryUtilization > scaler.config.MemoryUtilizationThreshold {
+		logger.InfoLog("Node removal would cause memory pressure exceeding scale-up threshold",
+			"nodeName", nodeName,
+			"projectedMemoryUtilization", projectedMemoryUtilization,
+			"threshold", scaler.config.MemoryUtilizationThreshold)
+		return true
+	}
+
+	return false
+}
+
+// wouldNodeRemovalCauseStoragePressure checks if removing a specific node would
+// cause storage pressure on the remaining nodes (e.g., if workloads get redistributed)
+func (scaler *ProxmoxScaler) wouldNodeRemovalCauseStoragePressure(nodeName string) bool {
+	// Get current disk utilization for all nodes
+	diskUtilization, err := scaler.Kubernetes.GetNodeDiskUtilization()
+	if err != nil {
+		logger.WarnLog("Failed to get disk utilization for node removal simulation", "error", err)
+		return true // Err on the side of caution
+	}
+
+	// Check if any remaining nodes are already close to storage thresholds
+	// If so, removing another node (which might cause workload redistribution) could be risky
+	nodeCount := len(diskUtilization)
+	nodesNearThreshold := 0
+
+	// Use a more conservative threshold for this check (5% lower than scale-up threshold)
+	conservativeThreshold := scaler.config.DiskUtilizationThreshold - 0.05
+	conservativeMinDiskGB := float64(scaler.config.MinAvailableDiskSpaceGB) + 3.0
+
+	for currentNodeName, disk := range diskUtilization {
+		// Skip the node we're considering removing
+		if currentNodeName == nodeName {
+			continue
+		}
+
+		logger.DebugLog("Checking remaining node storage for removal simulation",
+			"remainingNode", currentNodeName,
+			"utilizationPercent", disk.UtilizationPercent,
+			"availableGB", disk.AvailableDiskSpaceGB,
+			"conservativeThreshold", conservativeThreshold,
+			"conservativeMinDiskGB", conservativeMinDiskGB)
+
+		// Check if this remaining node is near storage limits
+		if disk.UtilizationPercent > conservativeThreshold {
+			nodesNearThreshold++
+			logger.InfoLog("Remaining node near disk utilization threshold",
+				"remainingNode", currentNodeName,
+				"utilization", disk.UtilizationPercent,
+				"threshold", conservativeThreshold)
+		}
+
+		if disk.AvailableDiskSpaceGB < conservativeMinDiskGB {
+			nodesNearThreshold++
+			logger.InfoLog("Remaining node near minimum disk space threshold",
+				"remainingNode", currentNodeName,
+				"availableGB", disk.AvailableDiskSpaceGB,
+				"threshold", conservativeMinDiskGB)
+		}
+	}
+
+	// If we have few nodes remaining and some are near thresholds, prevent scale-down
+	remainingNodeCount := nodeCount - 1 // After removing the target node
+
+	// Calculate the percentage of remaining nodes that are near thresholds
+	if remainingNodeCount > 0 {
+		nearThresholdPercentage := float64(nodesNearThreshold) / float64(remainingNodeCount)
+
+		logger.DebugLog("Storage pressure analysis for node removal",
+			"targetNode", nodeName,
+			"remainingNodes", remainingNodeCount,
+			"nodesNearThreshold", nodesNearThreshold,
+			"nearThresholdPercentage", nearThresholdPercentage)
+
+		// If more than 50% of remaining nodes are near storage thresholds, prevent scale-down
+		if nearThresholdPercentage > 0.5 {
+			logger.InfoLog("Node removal would leave too many nodes near storage thresholds",
+				"targetNode", nodeName,
+				"remainingNodes", remainingNodeCount,
+				"nodesNearThreshold", nodesNearThreshold,
+				"percentage", nearThresholdPercentage)
+			return true
+		}
+
+		// If we only have 1-2 nodes remaining and any are near thresholds, be very conservative
+		if remainingNodeCount <= 2 && nodesNearThreshold > 0 {
+			logger.InfoLog("Node removal would leave very few nodes with storage pressure",
+				"targetNode", nodeName,
+				"remainingNodes", remainingNodeCount,
+				"nodesNearThreshold", nodesNearThreshold)
+			return true
+		}
+	}
+
+	return false
 }
 
 // isResourcePressurePreventingScaleDown checks if current resource utilization is too high

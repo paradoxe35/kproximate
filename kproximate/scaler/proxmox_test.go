@@ -1251,3 +1251,213 @@ func TestScaleDownWithEnhancedFactorsDisabled(t *testing.T) {
 		t.Error("Expected scale-down to be allowed when enhanced factors are disabled")
 	}
 }
+
+func TestScaleDownPreventedByProjectedResourcePressure(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "kp-node-target",
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-30 * time.Minute)),
+					},
+				},
+			},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    6,          // 6 CPU cores total
+				Memory: 6442450944, // 6GB total
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-target": {
+					Cpu:    1.0,          // Low load on target node
+					Memory: 1073741824.0, // 1GB on target node
+				},
+			},
+			MockClusterAllocatedResources: kubernetes.AllocatedResources{
+				Cpu:    4.0,          // 4 CPU cores allocated cluster-wide
+				Memory: 4294967296.0, // 4GB allocated cluster-wide
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.67, // Current: 4/6 = 67%, acceptable
+				MemoryUtilization: 0.67, // Current: 4/6 = 67%, acceptable
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,    // Each node has 2 cores
+			KpNodeMemory:                  2048, // Each node has 2GB
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 5,
+			MinNodeAgeMinutes:             10,
+			EnableResourcePressureScaling: true,
+			CpuUtilizationThreshold:       0.8, // 80% threshold
+			MemoryUtilizationThreshold:    0.8, // 80% threshold
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should prevent scale-down because removing 2 cores would make utilization 4/4 = 100%
+	// which exceeds the 80% threshold
+	if scaleEvent != nil {
+		t.Error("Expected scale-down to be prevented due to projected resource pressure")
+	}
+}
+
+func TestScaleDownPreventedByProjectedStoragePressure(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "kp-node-target",
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-30 * time.Minute)),
+					},
+				},
+			},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    8,
+				Memory: 8589934592,
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-target": {
+					Cpu:    1.0,
+					Memory: 1073741824.0,
+				},
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.50, // Low utilization
+				MemoryUtilization: 0.50, // Low utilization
+			},
+			MockDiskUtilization: map[string]kubernetes.DiskUtilization{
+				"kp-node-target": {
+					NodeName:             "kp-node-target",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      50,
+					AvailableDiskSpaceGB: 50,
+					UtilizationPercent:   0.50,
+				},
+				"worker-node-1": {
+					NodeName:             "worker-node-1",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      82, // 82% utilization, above conservative threshold (85% - 5% = 80%)
+					AvailableDiskSpaceGB: 18,
+					UtilizationPercent:   0.82,
+				},
+				"worker-node-2": {
+					NodeName:             "worker-node-2",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      81, // 81% utilization, above conservative threshold (85% - 5% = 80%)
+					AvailableDiskSpaceGB: 19,
+					UtilizationPercent:   0.81,
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,
+			KpNodeMemory:                  2048,
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 5,
+			MinNodeAgeMinutes:             10,
+			EnableStoragePressureScaling:  true,
+			DiskUtilizationThreshold:      0.85, // Conservative threshold: 80%
+			MinAvailableDiskSpaceGB:       5,    // Conservative threshold: 8GB
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should prevent scale-down because 2 out of 2 remaining nodes (100%) are near storage thresholds
+	if scaleEvent != nil {
+		t.Error("Expected scale-down to be prevented due to projected storage pressure on remaining nodes")
+	}
+}
+
+func TestScaleDownAllowedWithSpecificNodeRemovalSimulation(t *testing.T) {
+	s := ProxmoxScaler{
+		Kubernetes: &kubernetes.KubernetesMock{
+			KpNodes: []apiv1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "kp-node-target",
+						CreationTimestamp: metav1.NewTime(time.Now().Add(-30 * time.Minute)),
+					},
+				},
+			},
+			WorkerNodesAllocatableResources: kubernetes.WorkerNodesAllocatableResources{
+				Cpu:    8,          // 8 CPU cores total
+				Memory: 8589934592, // 8GB total
+			},
+			AllocatedResources: map[string]kubernetes.AllocatedResources{
+				"kp-node-target": {
+					Cpu:    1.0,
+					Memory: 1073741824.0,
+				},
+			},
+			MockClusterAllocatedResources: kubernetes.AllocatedResources{
+				Cpu:    3.0,          // 3 CPU cores allocated cluster-wide
+				Memory: 3221225472.0, // 3GB allocated cluster-wide
+			},
+			MockResourceUtilization: kubernetes.ResourceUtilization{
+				CpuUtilization:    0.375, // Current: 3/8 = 37.5%, low
+				MemoryUtilization: 0.375, // Current: 3/8 = 37.5%, low
+			},
+			MockDiskUtilization: map[string]kubernetes.DiskUtilization{
+				"kp-node-target": {
+					NodeName:             "kp-node-target",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      50,
+					AvailableDiskSpaceGB: 50,
+					UtilizationPercent:   0.50,
+				},
+				"worker-node-1": {
+					NodeName:             "worker-node-1",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      60, // 60% utilization, well below thresholds
+					AvailableDiskSpaceGB: 40,
+					UtilizationPercent:   0.60,
+				},
+				"worker-node-2": {
+					NodeName:             "worker-node-2",
+					TotalDiskSpaceGB:     100,
+					UsedDiskSpaceGB:      65, // 65% utilization, well below thresholds
+					AvailableDiskSpaceGB: 35,
+					UtilizationPercent:   0.65,
+				},
+			},
+		},
+		config: config.KproximateConfig{
+			KpNodeCores:                   2,    // Each node has 2 cores
+			KpNodeMemory:                  2048, // Each node has 2GB
+			LoadHeadroom:                  0.2,
+			ScaleDownStabilizationMinutes: 5,
+			MinNodeAgeMinutes:             10,
+			EnableResourcePressureScaling: true,
+			EnableStoragePressureScaling:  true,
+			CpuUtilizationThreshold:       0.8,  // 80% threshold
+			MemoryUtilizationThreshold:    0.8,  // 80% threshold
+			DiskUtilizationThreshold:      0.85, // 85% threshold
+			MinAvailableDiskSpaceGB:       5,
+		},
+	}
+
+	scaleEvent, err := s.AssessScaleDown()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Should allow scale-down because:
+	// - Current utilization: 3/8 = 37.5% (low)
+	// - After removing 2 cores: 3/6 = 50% (still well below 80% threshold)
+	// - Storage pressure is low on remaining nodes
+	if scaleEvent == nil {
+		t.Error("Expected scale-down to be allowed with proper node removal simulation")
+	} else if scaleEvent.NodeName != "kp-node-target" {
+		t.Errorf("Expected scale-down target to be 'kp-node-target', got: %s", scaleEvent.NodeName)
+	}
+}
