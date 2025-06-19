@@ -187,7 +187,7 @@ func consumeScaleDownMsg(ctx context.Context, kpScaler scaler.Scaler, scaleDownM
 	err := json.Unmarshal(scaleDownMsg.Body, &scaleDownEvent)
 	if err != nil {
 		logger.ErrorLog("Failed to unmarshal scale down event", "error", err.Error())
-		scaleDownMsg.Reject(false)
+		scaleDownMsg.Reject(false) // Don't requeue malformed messages
 		return
 	}
 
@@ -207,7 +207,8 @@ func consumeScaleDownMsg(ctx context.Context, kpScaler scaler.Scaler, scaleDownM
 		logger.InfoLog("Triggered scale down event", "nodeName", nodeName)
 	}
 
-	scaleCtx, scaleCancel := context.WithDeadline(ctx, time.Now().Add(time.Second*300))
+	// Use longer timeout for scale down operations due to draining complexity
+	scaleCtx, scaleCancel := context.WithDeadline(ctx, time.Now().Add(time.Second*600))
 	defer scaleCancel()
 
 	err = kpScaler.ScaleDown(scaleCtx, scaleDownEvent)
@@ -219,8 +220,9 @@ func consumeScaleDownMsg(ctx context.Context, kpScaler scaler.Scaler, scaleDownM
 		return
 	}
 
+	// Reset retry count on successful scale down
 	resetNodeRetryCount(retryNodeName)
-	logger.InfoLog("Successfully scaled down node", "nodeName", nodeName)
+	logger.InfoLog("Successfully deleted node", "nodeName", nodeName)
 	scaleDownMsg.Ack(false)
 }
 

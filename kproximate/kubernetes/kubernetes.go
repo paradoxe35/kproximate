@@ -106,6 +106,11 @@ func NewKubernetesClient() (KubernetesClient, error) {
 		}
 	}
 
+	// Configure rate limiting to handle intensive operations like node draining
+	config.QPS = 50.0                                 // Increase queries per second from default 5
+	config.Burst = 100                                // Increase burst capacity from default 10
+	config.Timeout = time.Duration(600) * time.Second // Increase timeout for long operations
+
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
