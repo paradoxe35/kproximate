@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -185,25 +184,45 @@ func consumeScaleUpMsg(ctx context.Context, kpScaler scaler.Scaler, scaleUpMsg a
 
 func consumeScaleDownMsg(ctx context.Context, kpScaler scaler.Scaler, scaleDownMsg amqp.Delivery) {
 	var scaleDownEvent *scaler.ScaleEvent
-	json.Unmarshal(scaleDownMsg.Body, &scaleDownEvent)
-
-	if scaleDownMsg.Redelivered {
-		logger.InfoLog(fmt.Sprintf("Retrying scale down event: %s", scaleDownEvent.NodeName))
-	} else {
-		logger.InfoLog(fmt.Sprintf("Triggered scale down event: %s", scaleDownEvent.NodeName))
+	err := json.Unmarshal(scaleDownMsg.Body, &scaleDownEvent)
+	if err != nil {
+		logger.ErrorLog("Failed to unmarshal scale down event", "error", err.Error())
+		scaleDownMsg.Reject(false) // Don't requeue malformed messages
+		return
 	}
 
-	scaleCtx, scaleCancel := context.WithDeadline(ctx, time.Now().Add(time.Second*300))
+	nodeName := scaleDownEvent.NodeName
+	retryNodeName := "scale-down-" + nodeName
+
+	if scaleDownMsg.Redelivered {
+		// Increment retry count for this specific node
+		retryCount := incrementNodeRetryCount(retryNodeName)
+		logger.InfoLog("Retrying scale down event", "nodeName", nodeName, "retryCount", retryCount)
+
+		// Apply node-specific exponential backoff delay
+		delay := calculateRetryDelay(retryCount)
+		logger.InfoLog("Applying node-specific retry delay", "nodeName", nodeName, "delay", delay, "retryCount", retryCount)
+		time.Sleep(delay)
+	} else {
+		logger.InfoLog("Triggered scale down event", "nodeName", nodeName)
+	}
+
+	// Use longer timeout for scale down operations due to draining complexity
+	scaleCtx, scaleCancel := context.WithDeadline(ctx, time.Now().Add(time.Second*600))
 	defer scaleCancel()
 
-	err := kpScaler.ScaleDown(scaleCtx, scaleDownEvent)
+	err = kpScaler.ScaleDown(scaleCtx, scaleDownEvent)
 	if err != nil {
-		logger.WarnLog(fmt.Sprintf("Scale down event failed: %s", err.Error()))
+		logger.WarnLog("Scale down event failed", "error", err.Error(), "nodeName", nodeName)
+
+		// Requeue for retry (RabbitMQ's delivery limit will prevent infinite loops)
 		scaleDownMsg.Reject(true)
 		return
 	}
 
-	logger.InfoLog(fmt.Sprintf("Deleted %s", scaleDownEvent.NodeName))
+	// Reset retry count on successful scale down
+	resetNodeRetryCount(retryNodeName)
+	logger.InfoLog("Successfully deleted node", "nodeName", nodeName)
 	scaleDownMsg.Ack(false)
 }
 
