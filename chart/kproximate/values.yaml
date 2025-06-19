@@ -145,6 +145,8 @@ rabbitmq:
 
 image:
   registry: ghcr.io/paradoxe35
+  # Image tag defaults to chart appVersion, but can be overridden
+  tag: ""
   pullPolicy: IfNotPresent
 
 nameOverride: ""

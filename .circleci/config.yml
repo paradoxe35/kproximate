@@ -58,6 +58,24 @@ jobs:
       - setup_helm
       - checkout
       - run:
+          name: Install yq for YAML processing
+          command: |
+            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
+      - run:
+          name: Update Chart.yaml versions
+          command: |
+            # Update appVersion to match the git tag (application version)
+            yq eval ".appVersion = \"$CIRCLE_TAG\"" -i ./chart/$GITHUB_PROJECT_REPONAME/Chart.yaml
+
+            # Update chart version to match the git tag as well (for simplicity)
+            # In more complex scenarios, you might want to manage chart version separately
+            yq eval ".version = \"$CIRCLE_TAG\"" -i ./chart/$GITHUB_PROJECT_REPONAME/Chart.yaml
+
+            # Verify the changes
+            echo "Updated Chart.yaml:"
+            cat ./chart/$GITHUB_PROJECT_REPONAME/Chart.yaml
+      - run:
           name: Package the helm chart
           command: |
             helm repo add bitnami https://charts.bitnami.com/bitnami
