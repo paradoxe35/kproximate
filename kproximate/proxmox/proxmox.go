@@ -238,6 +238,7 @@ func (p *ProxmoxClient) NewKpNode(
 		"newid":  nextID,
 		"target": targetNode,
 		"vmid":   kpNodeTemplate.VmId(),
+		"full":   true, // Create full clone instead of linked clone
 	}
 
 	_, err = p.client.CloneQemuVm(kpNodeTemplate, cloneParams)
