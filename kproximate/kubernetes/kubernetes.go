@@ -38,6 +38,11 @@ type Kubernetes interface {
 	GetClusterAllocatedResources() (AllocatedResources, error)
 	CheckForNodeJoin(ctx context.Context, newKpNodeName string)
 	DeleteKpNode(ctx context.Context, kpNodeName string) error
+
+	// Enhanced scaling methods
+	GetClusterResourceUtilization() (ResourceUtilization, error)
+	GetRecentSchedulingErrors(timeWindow time.Duration) ([]SchedulingError, error)
+	GetNodeDiskUtilization() (map[string]DiskUtilization, error)
 }
 
 type KubernetesClient struct {
@@ -57,6 +62,28 @@ type WorkerNodesAllocatableResources struct {
 type AllocatedResources struct {
 	Cpu    float64
 	Memory float64
+}
+
+type ResourceUtilization struct {
+	CpuUtilization    float64 // 0.0 to 1.0 representing percentage
+	MemoryUtilization float64 // 0.0 to 1.0 representing percentage
+}
+
+type SchedulingError struct {
+	PodName      string
+	Namespace    string
+	Reason       string
+	Message      string
+	Timestamp    time.Time
+	FailureCount int
+}
+
+type DiskUtilization struct {
+	NodeName             string
+	TotalDiskSpaceGB     float64
+	UsedDiskSpaceGB      float64
+	AvailableDiskSpaceGB float64
+	UtilizationPercent   float64 // 0.0 to 1.0 representing percentage
 }
 
 func NewKubernetesClient() (KubernetesClient, error) {
@@ -540,6 +567,133 @@ func (k *KubernetesClient) LabelKpNode(kpNodeName string, newKpNodeLabels map[st
 			return err
 		},
 	)
+}
+
+// GetClusterResourceUtilization calculates the current CPU and memory utilization across all worker nodes
+func (k *KubernetesClient) GetClusterResourceUtilization() (ResourceUtilization, error) {
+	var utilization ResourceUtilization
+
+	// Get allocatable resources from all worker nodes
+	allocatableResources, err := k.GetWorkerNodesAllocatableResources()
+	if err != nil {
+		return utilization, fmt.Errorf("failed to get allocatable resources: %w", err)
+	}
+
+	// Get currently allocated resources across the cluster
+	allocatedResources, err := k.GetClusterAllocatedResources()
+	if err != nil {
+		return utilization, fmt.Errorf("failed to get allocated resources: %w", err)
+	}
+
+	// Calculate utilization percentages
+	if allocatableResources.Cpu > 0 {
+		utilization.CpuUtilization = allocatedResources.Cpu / float64(allocatableResources.Cpu)
+	}
+
+	if allocatableResources.Memory > 0 {
+		utilization.MemoryUtilization = allocatedResources.Memory / float64(allocatableResources.Memory)
+	}
+
+	return utilization, nil
+}
+
+// GetRecentSchedulingErrors retrieves recent pod scheduling errors within the specified time window
+func (k *KubernetesClient) GetRecentSchedulingErrors(timeWindow time.Duration) ([]SchedulingError, error) {
+	var schedulingErrors []SchedulingError
+
+	// Get events from the cluster
+	events, err := k.client.CoreV1().Events("").List(
+		context.TODO(),
+		metav1.ListOptions{
+			FieldSelector: "reason=FailedScheduling",
+		},
+	)
+	if err != nil {
+		return schedulingErrors, fmt.Errorf("failed to get events: %w", err)
+	}
+
+	cutoffTime := time.Now().Add(-timeWindow)
+
+	// Process events and extract scheduling errors
+	errorCounts := make(map[string]int)
+	for _, event := range events.Items {
+		if event.LastTimestamp.Time.After(cutoffTime) {
+			key := fmt.Sprintf("%s/%s", event.Namespace, event.InvolvedObject.Name)
+			errorCounts[key]++
+
+			// Create or update scheduling error
+			found := false
+			for i := range schedulingErrors {
+				if schedulingErrors[i].PodName == event.InvolvedObject.Name &&
+					schedulingErrors[i].Namespace == event.Namespace {
+					schedulingErrors[i].FailureCount = errorCounts[key]
+					if event.LastTimestamp.Time.After(schedulingErrors[i].Timestamp) {
+						schedulingErrors[i].Timestamp = event.LastTimestamp.Time
+						schedulingErrors[i].Message = event.Message
+					}
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				schedulingErrors = append(schedulingErrors, SchedulingError{
+					PodName:      event.InvolvedObject.Name,
+					Namespace:    event.Namespace,
+					Reason:       event.Reason,
+					Message:      event.Message,
+					Timestamp:    event.LastTimestamp.Time,
+					FailureCount: errorCounts[key],
+				})
+			}
+		}
+	}
+
+	return schedulingErrors, nil
+}
+
+// GetNodeDiskUtilization retrieves disk utilization information for all worker nodes
+func (k *KubernetesClient) GetNodeDiskUtilization() (map[string]DiskUtilization, error) {
+	diskUtilization := make(map[string]DiskUtilization)
+
+	// Get all worker nodes
+	nodes, err := k.GetWorkerNodes()
+	if err != nil {
+		return diskUtilization, fmt.Errorf("failed to get worker nodes: %w", err)
+	}
+
+	for _, node := range nodes {
+		// Get node metrics - this is a simplified approach
+		// In a real implementation, you might want to use metrics-server or node exporter
+
+		// Extract disk information from node status
+		var totalDisk, usedDisk float64
+
+		// Get ephemeral storage capacity and allocatable
+		if ephemeralStorage, exists := node.Status.Capacity["ephemeral-storage"]; exists {
+			totalDisk = float64(ephemeralStorage.Value()) / (1024 * 1024 * 1024) // Convert to GB
+		}
+
+		if allocatableStorage, exists := node.Status.Allocatable["ephemeral-storage"]; exists {
+			availableDisk := float64(allocatableStorage.Value()) / (1024 * 1024 * 1024) // Convert to GB
+			usedDisk = totalDisk - availableDisk
+		}
+
+		utilizationPercent := 0.0
+		if totalDisk > 0 {
+			utilizationPercent = usedDisk / totalDisk
+		}
+
+		diskUtilization[node.Name] = DiskUtilization{
+			NodeName:             node.Name,
+			TotalDiskSpaceGB:     totalDisk,
+			UsedDiskSpaceGB:      usedDisk,
+			AvailableDiskSpaceGB: totalDisk - usedDisk,
+			UtilizationPercent:   utilizationPercent,
+		}
+	}
+
+	return diskUtilization, nil
 }
 
 func (k *KubernetesClient) getMaxAllocatableMemoryForSinglePod(kpNodeNameRegex regexp.Regexp) (float64, error) {

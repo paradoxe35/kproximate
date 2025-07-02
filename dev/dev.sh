@@ -28,34 +28,54 @@ print_error() {
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." &> /dev/null && pwd )"
 
-# Default configuration values
-RABBITMQ_CONTAINER_NAME="kproximate-rabbitmq"
-RABBITMQ_USER="guest"
-RABBITMQ_PASSWORD="guest"
-RABBITMQ_PORT=5672
-RABBITMQ_MANAGEMENT_PORT=15672
+# Default configuration values (these can be overridden by .env.dev)
+# Using camelCase variable names that match what the application expects
 
-# Default kproximate configuration
-DEBUG=true
-POLL_INTERVAL=10
-MAX_KP_NODES=5
-LOAD_HEADROOM=0.2
-WAIT_SECONDS_FOR_JOIN=60
-WAIT_SECONDS_FOR_PROVISION=60
+# RabbitMQ defaults
+rabbitMQContainerName="kproximate-rabbitmq"
+rabbitMQUser="guest"
+rabbitMQPassword="guest"
+rabbitMQPort=5672
+rabbitMQManagementPort=15672
+rabbitMQUseTLS=false
 
-## Scale-down stabilization period in minutes. Prevents scale-down if any node
-## was created within this period.
-SCALE_DOWN_STABILIZATION_MINUTES=5
+# Application defaults
+debug=true
+pollInterval=10
+maxKpNodes=5
+loadHeadroom=0.2
+waitSecondsForJoin=60
+waitSecondsForProvision=60
 
-## Minimum age in minutes before a node can be considered for scale-down.
-## This prevents newly created nodes from being immediately removed.
-MIN_NODE_AGE_MINUTES=10
+# Scale-down stabilization defaults
+scaleDownStabilizationMinutes=5
+minNodeAgeMinutes=10
 
-# Node selection strategy configuration
-NODE_SELECTION_STRATEGY="spread"
-MIN_AVAILABLE_CPU_CORES=0
-MIN_AVAILABLE_MEMORY_MB=0
-EXCLUDED_NODES=""
+# Node selection strategy defaults
+nodeSelectionStrategy="spread"
+minAvailableCpuCores=0
+minAvailableMemoryMB=0
+excludedNodes=""
+
+# Proxmox defaults
+pmAllowInsecure=true
+pmDebug=false
+kpNodeNamePrefix="kp"
+kpNodeCores=2
+kpNodeMemory=2048
+kpNodeDisableSsh=false
+kpQemuExecJoin=true
+kpLocalTemplateStorage=true
+
+# Enhanced Autoscaling defaults
+enableResourcePressureScaling=true
+cpuUtilizationThreshold=0.8
+memoryUtilizationThreshold=0.8
+enableSchedulingErrorScaling=true
+schedulingErrorThreshold=3
+enableStoragePressureScaling=true
+diskUtilizationThreshold=0.85
+minAvailableDiskSpaceGB=5
 
 # Load environment variables from .env.dev if it exists
 ENV_FILE="$SCRIPT_DIR/.env.dev"
@@ -102,71 +122,103 @@ while [[ $# -gt 0 ]]; do
     key="$1"
     case $key in
         --debug)
-            DEBUG="$2"
+            debug="$2"
             shift 2
             ;;
         --poll-interval)
-            POLL_INTERVAL="$2"
+            pollInterval="$2"
             shift 2
             ;;
         --max-kp-nodes)
-            MAX_KP_NODES="$2"
+            maxKpNodes="$2"
             shift 2
             ;;
         --load-headroom)
-            LOAD_HEADROOM="$2"
+            loadHeadroom="$2"
             shift 2
             ;;
         --wait-seconds-for-join)
-            WAIT_SECONDS_FOR_JOIN="$2"
+            waitSecondsForJoin="$2"
             shift 2
             ;;
         --wait-seconds-for-provision)
-            WAIT_SECONDS_FOR_PROVISION="$2"
+            waitSecondsForProvision="$2"
             shift 2
             ;;
         --pm-url)
-            PM_URL="$2"
+            pmUrl="$2"
             shift 2
             ;;
         --pm-user-id)
-            PM_USER_ID="$2"
+            pmUserID="$2"
             shift 2
             ;;
         --pm-password)
-            PM_PASSWORD="$2"
+            pmPassword="$2"
             shift 2
             ;;
         --pm-token)
-            PM_TOKEN="$2"
+            pmToken="$2"
             shift 2
             ;;
         --kp-node-template-name)
-            KP_NODE_TEMPLATE_NAME="$2"
+            kpNodeTemplateName="$2"
             shift 2
             ;;
         --node-selection-strategy)
-            NODE_SELECTION_STRATEGY="$2"
+            nodeSelectionStrategy="$2"
             shift 2
             ;;
         --min-available-cpu-cores)
-            MIN_AVAILABLE_CPU_CORES="$2"
+            minAvailableCpuCores="$2"
             shift 2
             ;;
         --min-available-memory-mb)
-            MIN_AVAILABLE_MEMORY_MB="$2"
+            minAvailableMemoryMB="$2"
             shift 2
             ;;
         --excluded-nodes)
-            EXCLUDED_NODES="$2"
+            excludedNodes="$2"
             shift 2
             ;;
         --scale-down-stabilization-minutes)
-            SCALE_DOWN_STABILIZATION_MINUTES="$2"
+            scaleDownStabilizationMinutes="$2"
             shift 2
             ;;
         --min-node-age-minutes)
-            MIN_NODE_AGE_MINUTES="$2"
+            minNodeAgeMinutes="$2"
+            shift 2
+            ;;
+        --enable-resource-pressure-scaling)
+            enableResourcePressureScaling="$2"
+            shift 2
+            ;;
+        --cpu-utilization-threshold)
+            cpuUtilizationThreshold="$2"
+            shift 2
+            ;;
+        --memory-utilization-threshold)
+            memoryUtilizationThreshold="$2"
+            shift 2
+            ;;
+        --enable-scheduling-error-scaling)
+            enableSchedulingErrorScaling="$2"
+            shift 2
+            ;;
+        --scheduling-error-threshold)
+            schedulingErrorThreshold="$2"
+            shift 2
+            ;;
+        --enable-storage-pressure-scaling)
+            enableStoragePressureScaling="$2"
+            shift 2
+            ;;
+        --disk-utilization-threshold)
+            diskUtilizationThreshold="$2"
+            shift 2
+            ;;
+        --min-available-disk-space-gb)
+            minAvailableDiskSpaceGB="$2"
             shift 2
             ;;
         --help)
@@ -190,6 +242,17 @@ while [[ $# -gt 0 ]]; do
             echo "  --excluded-nodes <nodes>             Comma-separated list of nodes to exclude (default: \"\")"
             echo "  --scale-down-stabilization-minutes <number> Scale-down stabilization period in minutes (default: 5)"
             echo "  --min-node-age-minutes <number>     Minimum node age before scale-down in minutes (default: 10)"
+            echo ""
+            echo "Enhanced Autoscaling Options:"
+            echo "  --enable-resource-pressure-scaling <true|false>  Enable CPU/memory pressure scaling (default: true)"
+            echo "  --cpu-utilization-threshold <0.0-1.0>           CPU utilization threshold (default: 0.8)"
+            echo "  --memory-utilization-threshold <0.0-1.0>        Memory utilization threshold (default: 0.8)"
+            echo "  --enable-scheduling-error-scaling <true|false>  Enable scheduling error scaling (default: true)"
+            echo "  --scheduling-error-threshold <number>           Number of failed pods threshold (default: 3)"
+            echo "  --enable-storage-pressure-scaling <true|false>  Enable storage pressure scaling (default: true)"
+            echo "  --disk-utilization-threshold <0.0-1.0>          Disk utilization threshold (default: 0.85)"
+            echo "  --min-available-disk-space-gb <number>          Minimum available disk space in GB (default: 5)"
+            echo ""
             echo "  --help                               Show this help message"
             echo ""
             echo "Environment variables can also be set in $SCRIPT_DIR/.env.dev"
@@ -204,20 +267,20 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Check if required Proxmox parameters are provided
-if [ -z "${PM_URL}" ] || [ -z "${PM_USER_ID}" ] || [ -z "${KP_NODE_TEMPLATE_NAME}" ]; then
+if [ -z "${pmUrl}" ] || [ -z "${pmUserID}" ] || [ -z "${kpNodeTemplateName}" ]; then
     print_warning "Proxmox configuration is incomplete. The application will start but may not function correctly."
-    print_warning "Please provide PM_URL, PM_USER_ID, and KP_NODE_TEMPLATE_NAME parameters."
-    print_warning "Either PM_PASSWORD or PM_TOKEN is also required."
+    print_warning "Please provide pmUrl, pmUserID, and kpNodeTemplateName parameters."
+    print_warning "Either pmPassword or pmToken is also required."
 fi
 
 # Start RabbitMQ container if it's not already running
-if ! docker ps -a --format '{{.Names}}' | grep -q "^${RABBITMQ_CONTAINER_NAME}$"; then
+if ! docker ps -a --format '{{.Names}}' | grep -q "^${rabbitMQContainerName}$"; then
     print_info "Starting RabbitMQ container..."
-    docker run -d --name $RABBITMQ_CONTAINER_NAME \
-        -p $RABBITMQ_PORT:5672 \
-        -p $RABBITMQ_MANAGEMENT_PORT:15672 \
-        -e RABBITMQ_USERNAME=$RABBITMQ_USER \
-        -e RABBITMQ_PASSWORD=$RABBITMQ_PASSWORD \
+    docker run -d --name $rabbitMQContainerName \
+        -p $rabbitMQPort:5672 \
+        -p $rabbitMQManagementPort:15672 \
+        -e RABBITMQ_USERNAME=$rabbitMQUser \
+        -e RABBITMQ_PASSWORD=$rabbitMQPassword \
         rabbitmq:3-management
 
     # Wait for RabbitMQ to start
@@ -225,9 +288,9 @@ if ! docker ps -a --format '{{.Names}}' | grep -q "^${RABBITMQ_CONTAINER_NAME}$"
     sleep 10
 else
     # Check if the container is running
-    if ! docker ps --format '{{.Names}}' | grep -q "^${RABBITMQ_CONTAINER_NAME}$"; then
+    if ! docker ps --format '{{.Names}}' | grep -q "^${rabbitMQContainerName}$"; then
         print_info "Starting existing RabbitMQ container..."
-        docker start $RABBITMQ_CONTAINER_NAME
+        docker start $rabbitMQContainerName
 
         # Wait for RabbitMQ to start
         print_info "Waiting for RabbitMQ to start..."
@@ -237,86 +300,100 @@ else
     fi
 fi
 
-# Set environment variables for the application
-export debug=$DEBUG
-export pollInterval=$POLL_INTERVAL
-export maxKpNodes=$MAX_KP_NODES
-export loadHeadroom=$LOAD_HEADROOM
-export waitSecondsForJoin=$WAIT_SECONDS_FOR_JOIN
-export waitSecondsForProvision=$WAIT_SECONDS_FOR_PROVISION
+# Export environment variables for the application
+# Since we're now using camelCase variables that match what the app expects,
+# we can export them directly without conversion
+
+# Core application configuration
+export debug
+export pollInterval
+export maxKpNodes
+export loadHeadroom
+export waitSecondsForJoin
+export waitSecondsForProvision
 
 # RabbitMQ configuration
 export rabbitMQHost="localhost"
-export rabbitMQPort=$RABBITMQ_PORT
-export rabbitMQUser=$RABBITMQ_USER
-export rabbitMQPassword=$RABBITMQ_PASSWORD
-export rabbitMQUseTLS=${RABBITMQ_USE_TLS:-false}
+export rabbitMQPort
+export rabbitMQUser
+export rabbitMQPassword
+export rabbitMQUseTLS
 
 # Kubernetes configuration
 if [ ! -z "$KUBECONFIG" ]; then
     print_info "Using KUBECONFIG: $KUBECONFIG"
-    export KUBECONFIG=$KUBECONFIG
+    export KUBECONFIG
 fi
 
 # Proxmox configuration
-if [ ! -z "$PM_URL" ]; then
-    export pmUrl=$PM_URL
+if [ ! -z "$pmUrl" ]; then
+    export pmUrl
 fi
 
-if [ ! -z "$PM_USER_ID" ]; then
-    export pmUserID=$PM_USER_ID
+if [ ! -z "$pmUserID" ]; then
+    export pmUserID
 fi
 
-if [ ! -z "$PM_PASSWORD" ]; then
-    export pmPassword=$PM_PASSWORD
+if [ ! -z "$pmPassword" ]; then
+    export pmPassword
 fi
 
-if [ ! -z "$PM_TOKEN" ]; then
-    export pmToken=$PM_TOKEN
+if [ ! -z "$pmToken" ]; then
+    export pmToken
 fi
 
-if [ ! -z "$KP_NODE_TEMPLATE_NAME" ]; then
-    export kpNodeTemplateName=$KP_NODE_TEMPLATE_NAME
+if [ ! -z "$kpNodeTemplateName" ]; then
+    export kpNodeTemplateName
 fi
 
-# Additional configuration with default values
-export pmAllowInsecure=${PM_ALLOW_INSECURE:-true}
-export pmDebug=${PM_DEBUG:-$DEBUG}
-export kpNodeNamePrefix=${KP_NODE_NAME_PREFIX:-"kp"}
-export kpNodeCores=${KP_NODE_CORES:-2}
-export kpNodeMemory=${KP_NODE_MEMORY:-2048}
-export kpNodeDisableSsh=${KP_NODE_DISABLE_SSH:-false}
-export kpQemuExecJoin=${KP_QEMU_EXEC_JOIN:-true}
-export kpLocalTemplateStorage=${KP_LOCAL_TEMPLATE_STORAGE:-true}
+# Additional Proxmox configuration
+export pmAllowInsecure
+export pmDebug
+export kpNodeNamePrefix
+export kpNodeCores
+export kpNodeMemory
+export kpNodeDisableSsh
+export kpQemuExecJoin
+export kpLocalTemplateStorage
 
-# If SSH_KEY is provided, export it
-if [ ! -z "$SSH_KEY" ]; then
-    export sshKey=$SSH_KEY
+# If sshKey is provided, export it
+if [ ! -z "$sshKey" ]; then
+    export sshKey
 fi
 
-# If KP_NODE_LABELS is provided, export it
-if [ ! -z "$KP_NODE_LABELS" ]; then
-    export kpNodeLabels=$KP_NODE_LABELS
+# If kpNodeLabels is provided, export it
+if [ ! -z "$kpNodeLabels" ]; then
+    export kpNodeLabels
 fi
 
-# If KP_JOIN_COMMAND is provided, export it
-if [ ! -z "$KP_JOIN_COMMAND" ]; then
-    export kpJoinCommand=$KP_JOIN_COMMAND
+# If kpJoinCommand is provided, export it
+if [ ! -z "$kpJoinCommand" ]; then
+    export kpJoinCommand
     print_info "Using kpJoinCommand from environment"
 else
     print_warning "kpJoinCommand is not set. Nodes will not be able to join the Kubernetes cluster."
-    print_warning "Set KP_JOIN_COMMAND in your .env.dev file."
+    print_warning "Set kpJoinCommand in your .env.dev file."
 fi
 
 # Node selection strategy configuration
-export nodeSelectionStrategy=${NODE_SELECTION_STRATEGY:-"spread"}
-export minAvailableCpuCores=${MIN_AVAILABLE_CPU_CORES:-0}
-export minAvailableMemoryMB=${MIN_AVAILABLE_MEMORY_MB:-0}
-export excludedNodes=${EXCLUDED_NODES:-""}
+export nodeSelectionStrategy
+export minAvailableCpuCores
+export minAvailableMemoryMB
+export excludedNodes
 
 # Scale-down stabilization configuration
-export scaleDownStabilizationMinutes=${SCALE_DOWN_STABILIZATION_MINUTES:-5}
-export minNodeAgeMinutes=${MIN_NODE_AGE_MINUTES:-10}
+export scaleDownStabilizationMinutes
+export minNodeAgeMinutes
+
+# Enhanced Autoscaling configuration
+export enableResourcePressureScaling
+export cpuUtilizationThreshold
+export memoryUtilizationThreshold
+export enableSchedulingErrorScaling
+export schedulingErrorThreshold
+export enableStoragePressureScaling
+export diskUtilizationThreshold
+export minAvailableDiskSpaceGB
 
 # Change to project root directory
 cd $PROJECT_ROOT
@@ -368,9 +445,9 @@ run_component "controller" "Kproximate Controller"
 run_component "worker" "Kproximate Worker"
 
 print_info "Kproximate is running in development mode."
-print_info "RabbitMQ Management UI: http://localhost:$RABBITMQ_MANAGEMENT_PORT"
-print_info "Username: $RABBITMQ_USER"
-print_info "Password: $RABBITMQ_PASSWORD"
+print_info "RabbitMQ Management UI: http://localhost:$rabbitMQManagementPort"
+print_info "Username: $rabbitMQUser"
+print_info "Password: $rabbitMQPassword"
 print_info "Press Ctrl+C to stop the script (this will not stop the components)."
 
 # Keep the script running

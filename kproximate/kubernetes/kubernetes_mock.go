@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"regexp"
+	"time"
 
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +18,11 @@ type KubernetesMock struct {
 	FailedSchedulingDueToControlPlaneTaint bool
 	KpNodes                                []apiv1.Node
 	MockClusterAllocatedResources          AllocatedResources // New field for mock
+
+	// Enhanced scaling mock fields
+	MockResourceUtilization                ResourceUtilization
+	MockSchedulingErrors                   []SchedulingError
+	MockDiskUtilization                    map[string]DiskUtilization
 }
 
 func (m *KubernetesMock) GetClusterAllocatedResources() (AllocatedResources, error) {
@@ -74,4 +80,20 @@ func (m *KubernetesMock) DeleteKpNode(ctx context.Context, kpNodeName string) er
 
 func (k *KubernetesMock) LabelKpNode(kpNodeName string, newKpNodeLabels map[string]string) error {
 	return nil
+}
+
+// Enhanced scaling mock methods
+func (m *KubernetesMock) GetClusterResourceUtilization() (ResourceUtilization, error) {
+	return m.MockResourceUtilization, nil
+}
+
+func (m *KubernetesMock) GetRecentSchedulingErrors(timeWindow time.Duration) ([]SchedulingError, error) {
+	return m.MockSchedulingErrors, nil
+}
+
+func (m *KubernetesMock) GetNodeDiskUtilization() (map[string]DiskUtilization, error) {
+	if m.MockDiskUtilization == nil {
+		return make(map[string]DiskUtilization), nil
+	}
+	return m.MockDiskUtilization, nil
 }

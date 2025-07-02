@@ -88,6 +88,77 @@ kproximate:
     # Useful for maintenance, dedicated workloads, or resource constraints
     excludedNodes: "proxmox-node-maintenance,proxmox-node-storage"
 
+    # Enhanced Autoscaling Configuration
+    # These features provide proactive scaling based on resource pressure, scheduling errors, and storage constraints
+    # All features are enabled by default with production-ready thresholds
+
+    # Resource Pressure Thresholds
+    # Enable proactive scaling based on CPU and memory utilization before pods become unschedulable
+    ## Enable/disable resource pressure scaling (monitors cluster CPU/memory utilization)
+    enableResourcePressureScaling: true
+
+    ## CPU utilization threshold (0.0-1.0). Triggers scaling when cluster CPU usage exceeds this percentage.
+    ## Example uses 75% threshold for responsive scaling in production environment
+    cpuUtilizationThreshold: 0.75
+
+    ## Memory utilization threshold (0.0-1.0). Triggers scaling when cluster memory usage exceeds this percentage.
+    ## Example uses 80% threshold to allow for memory bursts while preventing exhaustion
+    memoryUtilizationThreshold: 0.80
+
+    # Pod Scheduling Error Events
+    # Enable scaling based on pod scheduling failures to quickly respond to resource constraints
+    ## Enable/disable scheduling error scaling (monitors FailedScheduling events)
+    enableSchedulingErrorScaling: true
+
+    ## Number of unique failed pods to trigger scaling. Monitors scheduling failures in the last 5 minutes.
+    ## Example uses 3 failed pods as threshold for balanced responsiveness
+    schedulingErrorThreshold: 3
+
+    # Storage Pressure Configuration
+    # Enable scaling based on disk space utilization to prevent node failures due to disk exhaustion
+    ## Enable/disable storage pressure scaling (monitors node disk utilization)
+    enableStoragePressureScaling: true
+
+    ## Disk utilization threshold (0.0-1.0). Triggers scaling when any node's disk usage exceeds this percentage.
+    ## Example uses 85% threshold to provide safety margin while avoiding premature scaling
+    diskUtilizationThreshold: 0.85
+
+    ## Minimum available disk space in GB. Triggers scaling when any node has less than this amount of free space.
+    ## Example uses 10GB minimum for production workloads with potential log/cache growth
+    minAvailableDiskSpaceGB: 10
+
+    # Alternative Configuration Examples:
+    #
+    # For High-Performance Computing (HPC) workloads:
+    # cpuUtilizationThreshold: 0.65        # Lower threshold for CPU-intensive workloads
+    # memoryUtilizationThreshold: 0.85     # Higher tolerance for memory usage
+    # schedulingErrorThreshold: 2          # Quick response to scheduling issues
+    # diskUtilizationThreshold: 0.90       # Higher disk tolerance for temporary files
+    #
+    # For Web Applications with variable traffic:
+    # cpuUtilizationThreshold: 0.70        # Responsive to traffic spikes
+    # memoryUtilizationThreshold: 0.75     # Conservative memory management
+    # schedulingErrorThreshold: 3          # Balanced error tolerance
+    # minAvailableDiskSpaceGB: 5           # Standard disk space buffer
+    #
+    # For Batch Processing workloads:
+    # cpuUtilizationThreshold: 0.85        # Higher tolerance for sustained load
+    # memoryUtilizationThreshold: 0.90     # Efficient resource utilization
+    # schedulingErrorThreshold: 5          # More tolerance for scheduling delays
+    # diskUtilizationThreshold: 0.80       # Conservative for large data processing
+    #
+    # For Development/Testing environments:
+    # enableResourcePressureScaling: false # Disable to save costs
+    # enableSchedulingErrorScaling: false  # Rely on traditional scaling only
+    # enableStoragePressureScaling: false  # Manual disk management
+    #
+    # For Mission-Critical Production with strict SLAs:
+    # cpuUtilizationThreshold: 0.60        # Very aggressive CPU scaling
+    # memoryUtilizationThreshold: 0.70     # Prevent any memory pressure
+    # schedulingErrorThreshold: 1          # Scale on first scheduling failure
+    # diskUtilizationThreshold: 0.75       # Early disk space intervention
+    # minAvailableDiskSpaceGB: 20          # Large safety buffer
+
     ## The rabbitmq service address
     rabbitMQHost: kproximate-rabbitmq
 
